@@ -1,0 +1,25 @@
+Run morning of 10/5:
+
+/Users/cindyjingliu/anaconda/bin/python /Users/cindyjingliu/Dropbox/0_HES/e81/HW3/team-east-meets-west/HW3_Baseline.py
+334
+0.610227212542
+{'estimator__criterion': 'entropy', 'estimator__max_features': 0.25, 'estimator__n_estimators': 50, 'estimator__max_depth': 20}
+{0: 1.0, 1: 1.0, 2: 1.0, 3: 1.0}
+Output for test data written to : TeamEastMeetsWest.csv
+Time to load data: 2.367s
+Time to run analysis: 5346.893s
+
+Process finished with exit code 0
+
+-----
+
+=====
+Run data for 2016-10-06 00:47
+Number of columns with missing values: 334
+best_estimator_ :
+=====
+Run data for 2016-10-06 07:10
+Number of columns with missing values: 334
+
+model_tuning.best_score_ = 0.5983813500100984
+model_tuning.best_params_ =
