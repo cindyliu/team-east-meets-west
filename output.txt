@@ -40,3 +40,205 @@ AUC by class: {0: 0.99999926167276898, 1: 0.99999990475665279, 2: 0.999999802975
 Time to load data: 2.966s
 Time to run analysis: 5539.177s
 
+ExtraTreeClassifier: Keeping 97 out of 334 features
+ExtraTreeClassifier: Keeping 107 out of 334 features
+ExtraTreeClassifier: Keeping 107 out of 334 features
+
+=====
+Run started 2016-10-07 12:18:51(500, 334) | (500, 1) | (500, 334)
+ExtraTreeClassifier: Keeping 107 out of 334 features
+
+=====
+Run started 2016-10-07 12:19:21
+
+(500, 334) | (500, 1) | (500, 334)
+ExtraTreeClassifier: Keeping 107 out of 334 features
+
+=====
+Run started 2016-10-07 12:20:22
+
+X.shape	Y.shape	Xtest.shape
+(500, 334)	(500, 1)	(500, 334)
+
+ExtraTreeClassifier: Keeping 107 out of 334 features
+
+=====
+Run started 2016-10-07 12:23:38
+
+X.shape: (500, 334)
+Y.shape: (500, 1)
+Xtest.shape: (500, 334)
+
+ExtraTreeClassifier: Keeping 107 out of 334 features
+AUC scores by class: {0: 0.9991713731219608, 1: 0.99597026332244842, 2: 0.9972475832438239, 3: 0.98796079958463134}
+
+Submission file created: TeamEastMeetsWest_2016-10-07_12:23:38.csv
+Run ended 2016-10-1475857419 12:23:39
+
+
+=====
+Run started 2016-10-07 12:25:28
+
+Default SVC settings
+
+X.shape: (5000, 334)
+Y.shape: (5000, 1)
+Xtest.shape: (5000, 334)
+
+ExtraTreeClassifier: Keeping 103 out of 334 features
+AUC scores by class: {0: 0.98559659266758737, 1: 0.94742355091204944, 2: 0.97298760439560439, 3: 0.91782224360323506}
+
+Submission file created: TeamEastMeetsWest_20161007-122528.csv
+Run ended 2016-10-1475857598 12:26:38
+
+
+=====
+Run started 2016-10-07 12:34:41
+
+Default SVC settings
+
+X.shape: (17378, 334)
+Y.shape: (17378, 1)
+Xtest.shape: (8179, 334)
+
+ExtraTreeClassifier: Keeping 97 out of 334 features
+AUC scores by class: {0: 0.98044439373592929, 1: 0.93931398693318424, 2: 0.97245563433429427, 3: 0.90402393111878276}
+
+Submission file created: TeamEastMeetsWest_20161007-123441.csv
+Run ended 2016-10-1475858622 12:43:42
+
+
+=====
+Run started 2016-10-07 13:32:48
+
+SVC settings:
+kernel: poly, random_state=25, cache_size=1000X.shape: (5000, 334)
+Y.shape: (5000, 1)
+Xtest.shape: (5000, 334)
+
+ExtraTreeClassifier: Keeping 103 out of 334 features
+AUC scores by class: {0: 0.9819545101111723, 1: 0.96225055962989336, 2: 0.96253661538461555, 3: 0.95845124627920275}
+
+Submission file created: TeamEastMeetsWest_20161007-133248.csv
+Run ended 2016-10-1475861665 13:34:25
+
+
+=====
+Run started 2016-10-07 13:36:40
+
+SVC settings:
+kernel: poly, random_state=25, cache_size=1000X.shape: (17378, 334)
+Y.shape: (17378, 1)
+Xtest.shape: (8179, 334)
+
+ExtraTreeClassifier: Keeping 97 out of 334 features
+
+=====
+Run started 2016-10-07 13:37:34
+
+SVC settings:
+kernel: poly, random_state=25, cache_size=1000
+
+X.shape: (17378, 334)
+Y.shape: (17378, 1)
+Xtest.shape: (8179, 334)
+
+ExtraTreeClassifier: Keeping 97 out of 334 features
+AUC scores by class: {0: 0.97828314418369078, 1: 0.93829417831707107, 2: 0.96304288304176322, 3: 0.91108088863953274}
+
+Submission file created: TeamEastMeetsWest_20161007-133734.csv
+Run ended 2016-10-1475862718 13:51:58
+
+
+=====
+Run started 2016-10-07 14:24:21
+
+SVC settings:
+** Scaled data first this time!!
+kernel: poly, random_state=25, cache_size=1000
+
+X.shape: (17378, 334)
+Y.shape: (17378, 1)
+Xtest.shape: (8179, 334)
+
+ExtraTreeClassifier: Keeping 97 out of 334 features
+AUC scores by class: {0: 0.99999996986419459, 1: 0.99999992380532221, 2: 0.9999993064743129, 3: 1.0}
+
+Submission file created: TeamEastMeetsWest_20161007-142421.csv
+Run ended 2016-10-1475865873 14:44:33
+
+
+=====
+Run started 2016-10-07 14:50:34
+
+SVC settings:
+** Scaled data first this time!!
+kernel: poly, random_state=25, cache_size=1000, class_weight='balanced'
+
+X.shape: (17378, 334)
+Y.shape: (17378, 1)
+Xtest.shape: (8179, 334)
+
+ExtraTreeClassifier: Keeping 97 out of 334 features
+AUC scores by class: {0: 0.99999915619745028, 1: 0.9999997523672971, 2: 0.9999915831200703, 3: 1.0}
+
+Submission file created: TeamEastMeetsWest_20161007-145034.csv
+Run ended 2016-10-1475867451 15:10:51
+
+=====
+Run started 2016-10-07 17:01:09
+
+SVC settings:
+** Scaled both training and test data this time
+kernel: poly, random_state=25, cache_size=1000
+
+X.shape: (17378, 334)
+Y.shape: (17378, 1)
+Xtest.shape: (8179, 334)
+
+ExtraTreeClassifier: Keeping 97 out of 334 features
+AUC scores by class: {0: 0.99999996986419459, 1: 0.99999992380532221, 2: 0.99999932223626042, 3: 1.0}
+
+Submission file created: TeamEastMeetsWest_20161007-170109.csv
+Run ended 2016-10-1475875274 17:21:14
+
+=====
+Run started 2016-10-07 18:26:17
+
+SVC settings:
+** Scaled both training and test data this time
+** Running grid search on SVC
+kernel: poly, random_state=25, cache_size=1000
+
+X.shape: (1000, 334)
+Y.shape: (1000, 1)
+Xtest.shape: (1000, 334)
+
+ExtraTreeClassifier: Keeping 104 out of 334 features
+best_estimator_:
+SVC(C=0.1, cache_size=1000, class_weight=None, coef0=0.0,
+  decision_function_shape=None, degree=2, gamma=0.1, kernel='sigmoid',
+  max_iter=-1, probability=True, random_state=None, shrinking=True,
+  tol=0.001, verbose=False)
+clf_tuned.best_score_ = 0.687
+clf_tuned.best_params_ = {'degree': 2, 'C': 0.1, 'gamma': 0.1, 'probability': True, 'kernel': 'sigmoid'}
+AUC scores by class: {0: 0.90154309682145783, 1: 0.72770450412274656, 2: 0.86663234663234678, 3: 0.59338039215686267}
+
+Time to run grid search: 0.000s
+Time to run analysis: 290.736s
+
+Run ended 2016-10-1475879467 18:31:07
+
+=====
+Run started 2016-10-07 18:54:39
+
+SVC settings:
+** Scaled both training and test data this time
+** Running grid search on SVC
+random_state=25, cache_size=1000
+
+X.shape: (17378, 334)
+Y.shape: (17378, 1)
+Xtest.shape: (8179, 334)
+
+ExtraTreeClassifier: Keeping 97 out of 334 features

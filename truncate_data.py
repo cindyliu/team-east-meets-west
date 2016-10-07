@@ -4,7 +4,7 @@ TRAIN_TRUTH_IN = 'trainingTruth.txt'
 TRAIT_TRUTH_OUT = 'trainingTruthSubSet.txt'
 TEST_DATA_IN = 'testData.txt'
 TEST_DATA_OUT = 'testDataSubSet.txt'
-ROWS_TO_COPY = 5000
+ROWS_TO_COPY = 1000
 
 data_in = [TRAIN_DATA_IN, TRAIN_TRUTH_IN, TEST_DATA_IN]
 data_out = [TRAIN_DATA_OUT, TRAIT_TRUTH_OUT, TEST_DATA_OUT]

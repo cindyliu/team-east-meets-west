@@ -1,35 +1,39 @@
 import pandas as pd
 import numpy as np
-import time
 import warnings
 import matplotlib.pyplot as plt
 import seaborn as sns
 import time
 
-from datetime import datetime
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import label_binarize
+from sklearn.preprocessing import StandardScaler
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.metrics import roc_curve, auc
-from sklearn.grid_search import GridSearchCV
+from sklearn.model_selection import GridSearchCV
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.ensemble import ExtraTreesClassifier
 from sklearn.feature_selection import SelectFromModel
 from sklearn.preprocessing import Imputer
+from sklearn.svm import SVC
 
 # Ignore warning to present clean output
 warnings.filterwarnings('ignore')
 
-<<<<<<< HEAD
+DEBUG = False
 
-OUTPUT_FILE = 'TeamEastMeetsWest2.csv'
+if DEBUG:
+    TRAINING_DATA = 'trainingDataSubSet.txt'
+    TRAINING_TRUTH = 'trainingTruthSubSet.txt'
+    TEST_DATA = 'testDataSubSet.txt'
+else:
+    TRAINING_DATA = 'trainingData.txt'
+    TRAINING_TRUTH = 'trainingTruth.txt'
+    TEST_DATA = 'testData.txt'
+SUBMISSION_FILE = 'TeamEastMeetsWest{}.csv'.format(time.strftime('_%Y%m%d-%H%M%S'))
 LOG_FILE = 'output.txt'
 
 
-def createSubmission(model):
-    #Create submission
-    Xtest = pd.read_csv('testData.txt',sep='\t',header=None)
-=======
 def exploreData(X):
     # Do initial analysis of the data
     plt.hist(X.var(axis=0))
@@ -45,11 +49,13 @@ def exploreData(X):
     # We see a similar range of values in all columns
     sns.heatmap(X[0:20], xticklabels=20, yticklabels=False)
 
-def replaceMissingValues(X):
+
+def replaceMissingValues(X, strategy):
     # Impute missing values, we can choose, mean, median or most frequent
     # Choosing mean as a standard
-    imp = Imputer(missing_values='NaN', copy=False, strategy='mean', axis=0)
+    imp = Imputer(missing_values='NaN', copy=False, strategy=strategy, axis=0)
     imp.fit_transform(X)   
+
 
 def reduceFeaturesbyVariance(Xtrain, Xtest, threshold = 0.22):
     # one way of removing low importance features is to 
@@ -61,13 +67,17 @@ def reduceFeaturesbyVariance(Xtrain, Xtest, threshold = 0.22):
     
     # Print out the number of features retained
     kept_features = selector.get_support(indices=True)
+    with open(LOG_FILE, 'a') as f:
+        f.write('Variance Threshold {0}: Keeping {1}, out of {2} features\n'.
+                format(threshold, len(kept_features), Xtrain.shape[1]))
     print('Variance Threshold {0}: Keeping {1}, out of {2} features'.
-            format(threshold, len(kept_features), Xtrain.shape[1]))
+          format(threshold, len(kept_features), Xtrain.shape[1]))
 
     # Reduce dataset to only include selected features
     Xtrain = selector.transform(Xtrain)
     Xtest = selector.transform(Xtest)
-    
+
+
 def reduceFeatureswithExtraTrees(Y, Xtrain, Xtest):
     # Build a forest and compute the feature importances
     forest = ExtraTreesClassifier(n_estimators=250,
@@ -82,18 +92,18 @@ def reduceFeatureswithExtraTrees(Y, Xtrain, Xtest):
     indices = np.argsort(importances)[::-1]
     
     # Print the feature ranking
-    #print("Feature ranking:")
-    #for f in range(X.shape[1]):
+    # print("Feature ranking:")
+    # for f in range(X.shape[1]):
     #    print("%d. feature %d (%f)" % (f + 1, indices[f], importances[indices[f]]))
     
     # Plot the feature importances of the forest
-    plt.figure()
-    plt.title("Feature importances")
-    plt.bar(range(Xtrain.shape[1]), importances[indices],
-           color="r", yerr=std[indices], align="center")
-    plt.xticks(range(Xtrain.shape[1]), indices)
-    plt.xlim([-1, Xtrain.shape[1]])
-    plt.show()
+    # plt.figure()
+    # plt.title("Feature importances")
+    # plt.bar(range(Xtrain.shape[1]), importances[indices],
+    #        color="r", yerr=std[indices], align="center")
+    # plt.xticks(range(Xtrain.shape[1]), indices)
+    # plt.xlim([-1, Xtrain.shape[1]])
+    # plt.show()
     
     # select features based on importance weights.
     # by default it uses mean importance as the threshold
@@ -101,16 +111,17 @@ def reduceFeatureswithExtraTrees(Y, Xtrain, Xtest):
         
     # Print out the number of features retained
     kept_features = selector.get_support(indices=True)
-    print('ExtraTreeClassifier: Keeping {0}, out of {1} features'.
-            format(len(kept_features), Xtrain.shape[1]))
+    with open(LOG_FILE, 'a') as f:
+        f.write('ExtraTreeClassifier: Keeping {0} out of {1} features\n'.format(len(kept_features), Xtrain.shape[1]))
+    print('ExtraTreeClassifier: Keeping {0} out of {1} features'.format(len(kept_features), Xtrain.shape[1]))
             
     # Reduce dataset to only include selected features    
     Xtrain = selector.transform(Xtrain)
     Xtest = selector.transform(Xtest)   
 
+
 def createSubmission(model, Xtest, filename):
-    #Create submission
->>>>>>> 2e0d3c7b4729b3ac6cd8fbb9db24eec0fc09f931
+    # Create submission
     y_final_prob = model.predict_proba(Xtest)
     y_final_label = model.predict(Xtest)
     
@@ -118,10 +129,11 @@ def createSubmission(model, Xtest, filename):
     sample.columns = ['prob1','prob2','prob3','prob4','label']
     sample.label = sample.label.astype(int)
     
-    #Submit this file to dropbox
-    sample.to_csv(OUTPUT_FILE, sep='\t', index=False, header=None)
-    print('Output for test data written to \'{}\'.'.format(OUTPUT_FILE))
-    
+    # Submit this file to dropbox
+    sample.to_csv(filename, sep='\t', index=False, header=None)
+    print('Output for test data written to \'{}\'.'.format(filename))
+
+
 def getAUCByClass(model, X, Y, classes=[1, 2, 3, 4]):
     
     # Get the predictions
@@ -131,7 +143,7 @@ def getAUCByClass(model, X, Y, classes=[1, 2, 3, 4]):
     y_bin = label_binarize(Y, classes=classes)
     model.predict_proba(X)
     
-    #Calculate AUC
+    # Calculate AUC
     fpr = dict()
     tpr = dict()
     roc_auc = dict()
@@ -141,197 +153,86 @@ def getAUCByClass(model, X, Y, classes=[1, 2, 3, 4]):
     
     return(roc_auc)  
 
-<<<<<<< HEAD
 
-try:
-    #Reading files
-    read_start = time.time()
-    X = pd.read_csv('trainingData.txt',sep='\t',header=None)
-    Y = pd.read_csv('trainingTruth.txt',sep='\t',header=None)
-    read_end = run_start = time.time()
-    Y = np.array(Y).ravel()
-
-    with open(LOG_FILE, 'a') as log_fd:
-        log_fd.write('=====\nRun data for {}\n'.format(time.strftime('%Y-%m-%d %H:%M')))
-        # Check if missing values
-        cols_wmissing = X.columns[pd.isnull(X).any()].tolist()
-        log_fd.write('Number of columns with missing values: {}\n'.format(len(cols_wmissing)))
-
-        # Replace NaNs for column with column mean (or we could do median)
-        X = X.apply(lambda x: x.fillna(x.median()),axis=0)
-
-        #clf = svm.SVC(kernel='linear', C=1)
-        #scores = cross_val_score(clf, X, Y, cv=5)
-        ##Simple K-Fold cross validation. 10 folds.
-        #cv = cross_validation.KFold(len(X), n_folds=10, random_state=41, shuffle=True)
-        #results = []
-        ## "Error_function" can be replaced by the error function of your analysis
-        #for traincv, testcv in cv:
-        #    svm.fit(X[traincv], Y[traincv])
-        #    svm.predict(X[traincv], Y[traincv])
-        #    c1 = svm.score(X[traincv], Y[traincv])
-        #    #c2 = svm.score(X[testcv], Y[testcv])
-        #    #results.append(svm.score(X[testcv], Y[testcv]))
-        #print(scores)
-
-        # If I specify larger number of estimators, it picks the larger ones
-        # So, choosing a smaller number deliberately
-        param_grid = {
-            'estimator__n_estimators': [5, 10, 20],
-            'estimator__criterion': ['gini', 'entropy'],
-            'estimator__max_features': ['log2', 'sqrt', 0.25, 5],
-            'estimator__max_depth': [10, 15, 20],
-            'estimator__oob_score': [True, False]
-        }
-
-        model_to_set = OneVsRestClassifier(RandomForestClassifier(random_state=25), -1)
-
-        gs_start = time.time()
-        model_tuning = GridSearchCV(model_to_set, param_grid=param_grid,
-                                     scoring='f1_weighted')
-        # Fit the model
-        model_tuning.fit(X, Y)
-        gs_end = time.time()
-        log_fd.write('best_estimator_ :\n')
-        log_fd.write(str(model_tuning.best_estimator_))
-        log_fd.write('\nmodel_tuning.best_score_ = {}\n'.format(model_tuning.best_score_))
-        log_fd.write('model_tuning.best_params_ = ')
-        log_fd.write(str(model_tuning.best_params_))
-        # best_params = model_tuning.best_params_
-        log_fd.write('\nAUC by class: ')
-        auc_start = time.time()
-        log_fd.write(str(getAUCByClass(model_tuning, X, Y, classes=[1, 2, 3, 4])))
-
-        ## Use cross validation to create the next model
-        #model2 = RandomForestClassifier(n_estimators=100)
-        ##Simple K-Fold cross validation. 10 folds.
-        #cv = cross_validation.KFold(len(X), n_folds=10, indices=False)
-        #results = []
-        ## "Error_function" can be replaced by the error function of your analysis
-        #for traincv, testcv in cv:
-        #        probas = model2.fit(X[traincv], Y[traincv]).predict_proba(X[testcv])
-        #        results.append( Error_function )
-        #
-        #model1 = OneVsRestClassifier(RandomForestClassifier(n_estimators = 50, criterion = 'entropy',
-        #                            max_depth = 20, max_features= 0.25, random_state=25), -1)
-        #model1.fit(X,Y)
-        #print(getAUCByClass(model1, X, Y, classes=[1, 2, 3, 4]))
-        run_end = time.time()
-        createSubmission(model_tuning)
-
-        log_fd.write('\n\nTime to load data: {:.3f}s\n'.format(read_end - read_start))
-        log_fd.write('Time to run grid search: {:.3f}s\n'.format(gs_end - gs_start))
-        log_fd.write('Time to run AUC: {:.3f}s\n'.format(run_end - auc_start))
-        log_fd.write('Total time to run analysis: {:.3f}s\n\n'.format(run_end - run_start))
-
-    print('Log written to \'{}\'.'.format(LOG_FILE))
-except SystemExit:
-    log_fd.write('\n\nSystem exited at {}.'.format(time.strftime('%Y-%m-%d %H:%M')))
-    print('\nSystem exited at {}.'.format(time.strftime('%Y-%m-%d %H:%M')))
-    raise
-=======
 def main():
+
+    with open(LOG_FILE, 'a') as f:
+        f.write('=====\nRun started {}\n\n'.format(time.strftime('%Y-%m-%d %H:%M:%S')))
+        f.write('SVC settings:\n')
+        f.write('** Scaled both training and test data this time\n')
+        f.write('** Running grid search on SVC\n')
+        f.write('kernel: poly, random_state=25, cache_size=1000\n\n')
+
     # Reading files
     read_start = time.time()
-    
+
     # Read in the data
-    X = pd.read_csv("data/trainingData.txt",sep='\t',header=None)
-    Y = pd.read_csv("data/trainingTruth.txt",sep='\t',header=None)
-    Xtest = pd.read_csv("data/testData.txt",sep="\t",header=None)
-    
-    read_end = run_start = time.time()
-    
+    X = pd.read_csv(TRAINING_DATA, sep='\t', header=None)
+    Y = pd.read_csv(TRAINING_TRUTH, sep='\t', header=None)
+    Xtest = pd.read_csv(TEST_DATA, sep="\t", header=None)
+
+    read_end = time.time()
+
+    with open(LOG_FILE, 'a') as f:
+        f.write('X.shape: {}\nY.shape: {}\nXtest.shape: {}\n\n'.format(str(X.shape), str(Y.shape), str(Xtest.shape)))
+
+    run_start = time.time()
+
     # Flatten output labels array
     Y = np.array(Y).ravel()
-    
+
     # Do some data exploration
-    exploreData(X)
-    
+    # exploreData(X_scaled)
+
     # Replace missing values
-    replaceMissingValues(X)
-    
+    replaceMissingValues(X, 'mean')
+
+    # Scale data to normal distribution (gaussian,  mean = 0, variance = 1)
+    scaler = StandardScaler().fit(X)
+    X_scaled = scaler.transform(X)
+    Xtest_scaled = scaler.transform(Xtest)
+
     # Reduce feature based on importance
-    reduceFeatureswithExtraTrees(Y, X, Xtest)
-    
-    
-#    clf = svm.SVC(kernel='linear', C=1)
-#    scores = cross_val_score(clf, X, Y, cv=5)
-#    #Simple K-Fold cross validation. 10 folds.
-#    cv = cross_validation.KFold(len(X), n_folds=10, random_state=41, shuffle=True)
-#    results = []
-#    # "Error_function" can be replaced by the error function of your analysis
-#    for traincv, testcv in cv:
-#        svm.fit(X[traincv], Y[traincv])
-#        svm.predict(X[traincv], Y[traincv])
-#        c1 = svm.score(X[traincv], Y[traincv])
-#        #c2 = svm.score(X[testcv], Y[testcv])
-#        #results.append(svm.score(X[testcv], Y[testcv]))
-#    print(scores)
-#    
-#     If I specify larger number of estimators, it picks the larger ones
-#     So, choosing a smaller number deliberately
-#    param_grid = { 
-#        'estimator__n_estimators': [25, 50],
-#        'estimator__criterion': ['gini', 'entropy'],
-#        'estimator__max_features': ['log2', 'sqrt', 0.25],
-#        'estimator__max_depth': [10, 20, None],
-#        'estimator__oob_score': [True, False]
-#    }
-#    
-#    model_to_set = OneVsRestClassifier(RandomForestClassifier(random_state=25), -1)
-#    
-#    model_tuning = GridSearchCV(model_to_set, param_grid=param_grid, 
-#                                 scoring='f1_weighted')
-#    # Fit the model
-#    model_tuning.fit(X, Y)
-#    print(model_tuning.best_score_)
-#    print(model_tuning.best_params_)
-#    best_params = model_tuning.best_params_
-#    print(getAUCByClass(model_tuning, X, Y, classes=[1, 2, 3, 4]))
-#    
-#       
-#    param_grid = {'estimator__n_estimators':[20,30,40,50], 
-#                  'estimator__max_depth':[3,6,8,12,24,32], 
-#                  'estimator__min_samples_split':[2,4,6],
-#                  'estimator__min_samples_leaf':[1,2,4] }
-#    model_to_set = OneVsRestClassifier(RandomForestClassifier(random_state=25), -1)
-#    model_tuning = GridSearchCV(model_to_set, 
-#                            param_grid = param_grid, 
-#                            scoring='f1_weighted',
-#                            n_jobs=4, iid=False, cv=5)
-#    # Fit the model
-#    model_tuning.fit(X, Y)
-#    
-#    print(model_tuning.best_score_)
-#    print(model_tuning.best_params_)
-#    print(getAUCByClass(model_tuning, X, Y, classes=[1, 2, 3, 4]))
-    
-      
-    model1 = OneVsRestClassifier(RandomForestClassifier(n_estimators = 50, criterion = 'entropy', 
-                                max_depth = 20, max_features= 0.25, random_state=25, oob_score = True), -1)
-    model1.fit(X, Y)
-    print(getAUCByClass(model1, X, Y, classes=[1, 2, 3, 4]))   
-    
+    reduceFeatureswithExtraTrees(Y, X_scaled, Xtest_scaled)
+
+    param_grid = {
+        'kernel': ['poly', 'linear', 'sigmoid'],
+        'degree': [2, 4, 5],
+        'gamma': [.1, .25, .5],
+        'C': [.1, .25, .5]
+    }
+
+    clf = SVC(probability=True, cache_size=1000)
+
+    gs_start = time.time()
+    clf_tuned = GridSearchCV(clf, param_grid=param_grid)
+    gs_end = time.time()
+
+    clf_tuned.fit(X_scaled, Y)
+
+    auc_scores = getAUCByClass(clf_tuned, X_scaled, Y, classes=[1, 2, 3, 4])
+    with open(LOG_FILE, 'a') as f:
+        f.write('best_estimator_:\n')
+        f.write(str(clf_tuned.best_estimator_))
+        f.write('\nclf_tuned.best_score_ = {}\n'.format(clf_tuned.best_score_))
+        f.write('clf_tuned.best_params_ = {}\n'.format(str(clf_tuned.best_params_)))
+        f.write('AUC scores by class: {}\n\n'.format(str(auc_scores)))
+    print(auc_scores)
+
     run_end = time.time()
-    file_id = '%s'%datetime.now().strftime('%m-%d-%Y_%H%M')
-    
-    # Take a note of strategy
-    strategy_fn = 'Strategy-%s.txt'%file_id
-    file = open(strategy_fn, "w")
-    
-    file.write("Missing values = mean, feature selection = ET")
-    file.write("RF = n_estimators = 50, criterion = entropy, max_depth = 20, max_features= 0.25, random_state=25, oob_score = True")
-    file.close()
-    
-    # Create results filename 
-    result_fn = 'TeamEastMeetsWest-%s.csv'%file_id  
-    
-    createSubmission(model1, Xtest, result_fn)
-    
+
+    with open(LOG_FILE, 'a') as f:
+        if not DEBUG:
+            createSubmission(clf, Xtest_scaled, SUBMISSION_FILE)
+            f.write('Submission file created: {}\n'.format(SUBMISSION_FILE))
+        f.write('Time to run grid search: {:.3f}s\n'.format(gs_end - gs_start))
+        f.write('Time to run analysis: {:.3f}s\n\n'.format(run_end - run_start))
+        f.write('Run ended {}\n\n'.format(time.strftime('%Y-%m-%s %H:%M:%S')))
+
     # Print some timings
     print('Time to load data: {:.3f}s'.format(read_end - read_start))
     print('Time to run analysis: {:.3f}s'.format(run_end - run_start))
 
-if __name__=='__main__':
+
+if __name__ == '__main__':
     main()
->>>>>>> 2e0d3c7b4729b3ac6cd8fbb9db24eec0fc09f931
