@@ -7,19 +7,22 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import label_binarize
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.metrics import roc_curve, auc
-from sklearn.grid_search import GridSearchCV
+from sklearn.model_selection import GridSearchCV
+from sklearn import svm
+from sklearn import model_selection
+from sklearn.model_selection import cross_val_score
 
 
 # Ignore warning to present clean output
 warnings.filterwarnings('ignore')
 
 
-OUTPUT_FILE = 'TeamEastMeetsWest2.csv'
+OUTPUT_FILE = 'TeamEastMeetsWest3.csv'
 LOG_FILE = 'output.txt'
 
 
 def createSubmission(model):
-    #Create submission
+    # Create submission
     Xtest = pd.read_csv('testData.txt',sep='\t',header=None)
     y_final_prob = model.predict_proba(Xtest)
     y_final_label = model.predict(Xtest)
@@ -27,10 +30,11 @@ def createSubmission(model):
     sample = pd.DataFrame(np.hstack([y_final_prob.round(5),y_final_label.reshape(y_final_prob.shape[0],1)]))
     sample.columns = ['prob1','prob2','prob3','prob4','label']
     sample.label = sample.label.astype(int)
-    #Submit this file to dropbox
+    # Submit this file to dropbox
     sample.to_csv(OUTPUT_FILE, sep='\t', index=False, header=None)
     print('Output for test data written to \'{}\'.'.format(OUTPUT_FILE))
-    
+
+
 def getAUCByClass(model, X, Y, classes=[1, 2, 3, 4]):
     
     # Get the predictions
@@ -40,7 +44,7 @@ def getAUCByClass(model, X, Y, classes=[1, 2, 3, 4]):
     y_bin = label_binarize(Y, classes=classes)
     model.predict_proba(X)
     
-    #Calculate AUC
+    # Calculate AUC
     fpr = dict()
     tpr = dict()
     roc_auc = dict()
@@ -52,7 +56,9 @@ def getAUCByClass(model, X, Y, classes=[1, 2, 3, 4]):
 
 
 try:
-    #Reading files
+    print('\nRun started at {}.'.format(time.strftime('%Y-%m-%d %H:%M:%S')))
+
+    # Reading files
     read_start = time.time()
     X = pd.read_csv('trainingData.txt',sep='\t',header=None)
     Y = pd.read_csv('trainingTruth.txt',sep='\t',header=None)
@@ -68,19 +74,19 @@ try:
         # Replace NaNs for column with column mean (or we could do median)
         X = X.apply(lambda x: x.fillna(x.median()),axis=0)
 
-        #clf = svm.SVC(kernel='linear', C=1)
-        #scores = cross_val_score(clf, X, Y, cv=5)
-        ##Simple K-Fold cross validation. 10 folds.
-        #cv = cross_validation.KFold(len(X), n_folds=10, random_state=41, shuffle=True)
-        #results = []
-        ## "Error_function" can be replaced by the error function of your analysis
-        #for traincv, testcv in cv:
-        #    svm.fit(X[traincv], Y[traincv])
-        #    svm.predict(X[traincv], Y[traincv])
-        #    c1 = svm.score(X[traincv], Y[traincv])
-        #    #c2 = svm.score(X[testcv], Y[testcv])
-        #    #results.append(svm.score(X[testcv], Y[testcv]))
-        #print(scores)
+        clf = svm.SVC(kernel='linear', C=1)
+        scores = cross_val_score(clf, X, Y, cv=5)
+        # Simple K-Fold cross validation. 10 folds.
+        cv = model_selection.KFold(len(X), n_folds=10, random_state=41, shuffle=True)
+        results = []
+        # "Error_function" can be replaced by the error function of your analysis
+        for traincv, testcv in cv:
+            clf.fit(X[traincv], Y[traincv])
+            clf.predict(X[traincv], Y[traincv])
+            c1 = clf.score(X[traincv], Y[traincv])
+            # c2 = svm.score(X[testcv], Y[testcv])
+            # results.append(svm.score(X[testcv], Y[testcv]))
+        print(scores)
 
         # If I specify larger number of estimators, it picks the larger ones
         # So, choosing a smaller number deliberately
@@ -110,20 +116,20 @@ try:
         auc_start = time.time()
         log_fd.write(str(getAUCByClass(model_tuning, X, Y, classes=[1, 2, 3, 4])))
 
-        ## Use cross validation to create the next model
-        #model2 = RandomForestClassifier(n_estimators=100)
-        ##Simple K-Fold cross validation. 10 folds.
-        #cv = cross_validation.KFold(len(X), n_folds=10, indices=False)
-        #results = []
-        ## "Error_function" can be replaced by the error function of your analysis
-        #for traincv, testcv in cv:
+        # Use cross validation to create the next model
+        # model2 = RandomForestClassifier(n_estimators=100)
+        # Simple K-Fold cross validation. 10 folds.
+        # cv = cross_validation.KFold(len(X), n_folds=10, indices=False)
+        # results = []
+        # "Error_function" can be replaced by the error function of your analysis
+        # for traincv, testcv in cv:
         #        probas = model2.fit(X[traincv], Y[traincv]).predict_proba(X[testcv])
         #        results.append( Error_function )
         #
-        #model1 = OneVsRestClassifier(RandomForestClassifier(n_estimators = 50, criterion = 'entropy',
+        # model1 = OneVsRestClassifier(RandomForestClassifier(n_estimators = 50, criterion = 'entropy',
         #                            max_depth = 20, max_features= 0.25, random_state=25), -1)
-        #model1.fit(X,Y)
-        #print(getAUCByClass(model1, X, Y, classes=[1, 2, 3, 4]))
+        # model1.fit(X,Y)
+        # print(getAUCByClass(model1, X, Y, classes=[1, 2, 3, 4]))
         run_end = time.time()
         createSubmission(model_tuning)
 
@@ -134,6 +140,7 @@ try:
 
     print('Log written to \'{}\'.'.format(LOG_FILE))
 except SystemExit:
-    log_fd.write('\n\nSystem exited at {}.'.format(time.strftime('%Y-%m-%d %H:%M')))
-    print('\nSystem exited at {}.'.format(time.strftime('%Y-%m-%d %H:%M')))
+    with open(LOG_FILE, 'a') as log_fd:
+        log_fd.write('\n\nSystem exited at {}.\n'.format(time.strftime('%Y-%m-%d %H:%M')))
+    print('\nSystem exited at {}.'.format(time.strftime('%Y-%m-%d %H:%M:%S')))
     raise
