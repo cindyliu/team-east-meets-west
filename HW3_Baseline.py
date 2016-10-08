@@ -1,27 +1,72 @@
 import pandas as pd
 import numpy as np
 import warnings
+import logging
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import seaborn as sns
 import time
 
 from datetime import datetime
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import label_binarize
+from sklearn.preprocessing import StandardScaler
 from sklearn.multiclass import OneVsRestClassifier
-from sklearn.metrics import roc_curve, auc
+from sklearn.metrics import roc_curve, auc, f1_score
 from sklearn.grid_search import GridSearchCV
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.ensemble import ExtraTreesClassifier
 from sklearn.feature_selection import SelectFromModel
 from sklearn.preprocessing import Imputer
+from sklearn.svm import SVC
 
 # Ignore warning to present clean output
 warnings.filterwarnings('ignore')
 
-OUTPUT_FILE = 'TeamEastMeetsWest2.csv'
-LOG_FILE = 'output.txt'
-
+# Added ability to debug with smaller datasets
+DEBUG = False
+if DEBUG:
+    TRAINING_DATA = 'trainingDataSubSet.txt'
+    TRAINING_TRUTH = 'trainingTruthSubSet.txt'
+    TEST_DATA = 'testDataSubSet.txt'
+else:
+    TRAINING_DATA = 'trainingData.txt'
+    TRAINING_TRUTH = 'trainingTruth.txt'
+    TEST_DATA = 'testData.txt'
+    
+def initLogging():
+    
+    # Initialize log confid
+    log_fn = './HW3_run_%s.log'%file_id
+                        
+    # create logger 
+    global logger
+    logger = logging.getLogger('HW3')
+    
+    # reset handlers so as not to have to exit shell 
+    # between two executions
+    logger.handlers = []
+    
+    logger.setLevel(logging.DEBUG)
+    
+    # create file handler which logs even debug messages
+    fh = logging.FileHandler(log_fn)
+    fh.setLevel(logging.DEBUG)
+    
+    # create console handler with a higher log level
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.ERROR)
+    
+    # create formatter and add it to the handlers
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s',
+                                  datefmt='%m/%d/%Y %I:%M:%S %p')
+    fh.setFormatter(formatter)
+    ch.setFormatter(formatter)
+    
+    # add the handlers to the logger
+    logger.addHandler(fh)
+    logger.addHandler(ch)  
+    
 def exploreData(X):
     # Do initial analysis of the data
     plt.hist(X.var(axis=0))
@@ -40,21 +85,23 @@ def exploreData(X):
 def replaceMissingValues(X):
     # Impute missing values, we can choose, mean, median or most frequent
     # Choosing mean as a standard
-    imp = Imputer(missing_values='NaN', copy=False, strategy='mean', axis=0)
+    strategy = 'mean'
+    imp = Imputer(missing_values='NaN', copy=False, strategy=strategy, axis=0)
     imp.fit_transform(X)   
+    logger.info('Missing values replaced using %s' % strategy)
 
 def reduceFeaturesbyVariance(Xtrain, Xtest, threshold = 0.22):
     # one way of removing low importance features is to 
     # remove features with low variability
-    # We know we have a number below 0.22, so we could
-    # remove them
+    # Looking at the variance histogram, we can 
+    # choose 0.22 as a good cutoff
     selector = VarianceThreshold(threshold = threshold)
     selector.fit(Xtrain)
     
     # Print out the number of features retained
     kept_features = selector.get_support(indices=True)
-    print('Variance Threshold {0}: Keeping {1}, out of {2} features'.
-            format(threshold, len(kept_features), Xtrain.shape[1]))
+    logger.info('Variance Threshold %0.2f: Keeping %d, out of %d features' 
+                % (threshold, len(kept_features), Xtrain.shape[1]))
 
     # Reduce dataset to only include selected features
     Xtrain = selector.transform(Xtrain)
@@ -73,18 +120,23 @@ def reduceFeatureswithExtraTrees(Y, Xtrain, Xtest):
                  axis=0)
     indices = np.argsort(importances)[::-1]
     
-    # Print the feature ranking
-    #print("Feature ranking:")
-    #for f in range(X.shape[1]):
-    #    print("%d. feature %d (%f)" % (f + 1, indices[f], importances[indices[f]]))
+    # Log top 10 features
+    logger.info("Feature ranking:")
+    for f in range(10):
+        logger.info("%d. feature %d (%f)" % (f + 1, indices[f], importances[indices[f]]))
     
     # Plot the feature importances of the forest
     plt.figure()
     plt.title("Feature importances")
     plt.bar(range(Xtrain.shape[1]), importances[indices],
            color="r", yerr=std[indices], align="center")
-    plt.xticks(range(Xtrain.shape[1]), indices)
+    plt.xticks(range(Xtrain.shape[1]), indices, rotation=90)
     plt.xlim([-1, Xtrain.shape[1]])
+    ax = plt.axes()
+    # Skip some of the feature labels to reduce crowding
+    ax.xaxis.set_major_locator(ticker.MultipleLocator(15))
+    ax.set_xlabel('features') 
+    ax.set_ylabel('importance')
     plt.show()
     
     # select features based on importance weights.
@@ -93,25 +145,12 @@ def reduceFeatureswithExtraTrees(Y, Xtrain, Xtest):
         
     # Print out the number of features retained
     kept_features = selector.get_support(indices=True)
-    print('ExtraTreeClassifier: Keeping {0}, out of {1} features'.
-            format(len(kept_features), Xtrain.shape[1]))
+    logger.info('ExtraTreeClassifier: Keeping %d, out of %d features' %
+                (len(kept_features), Xtrain.shape[1]))
             
     # Reduce dataset to only include selected features    
     Xtrain = selector.transform(Xtrain)
     Xtest = selector.transform(Xtest)   
-
-def createSubmission(model, Xtest, filename):
-    #Create submission
-    y_final_prob = model.predict_proba(Xtest)
-    y_final_label = model.predict(Xtest)
-    
-    sample = pd.DataFrame(np.hstack([y_final_prob.round(5),y_final_label.reshape(y_final_prob.shape[0],1)]))
-    sample.columns = ['prob1','prob2','prob3','prob4','label']
-    sample.label = sample.label.astype(int)
-    
-    #Submit this file to dropbox
-    sample.to_csv(OUTPUT_FILE, sep='\t', index=False, header=None)
-    print('Output for test data written to \'{}\'.'.format(OUTPUT_FILE))
     
 def getAUCByClass(model, X, Y, classes=[1, 2, 3, 4]):
     
@@ -120,7 +159,6 @@ def getAUCByClass(model, X, Y, classes=[1, 2, 3, 4]):
 
     # Binarize the output
     y_bin = label_binarize(Y, classes=classes)
-    model.predict_proba(X)
     
     #Calculate AUC
     fpr = dict()
@@ -130,20 +168,151 @@ def getAUCByClass(model, X, Y, classes=[1, 2, 3, 4]):
         fpr[i], tpr[i], _ = roc_curve(y_bin[:, i], model_predict[:, i])
         roc_auc[i] = auc(fpr[i], tpr[i])
     
-    return(roc_auc)  
+    return(roc_auc)
+    
+def getF1ScoreByClass(model, X, Y, classes=[1, 2, 3, 4]):
+    
+    # Get the predictions
+    model_predict = model.predict_proba(X)
+    # Binarize the predictions
+    model_predict = (model_predict == model_predict.max(axis=1, keepdims=True)).astype(int)
+
+    # Binarize the output
+    y_bin = label_binarize(Y, classes=classes)
+    
+    # Calculate F1 scores
+    f1_scores = dict()
+    for i in range(4):
+        f1_scores[i] = f1_score(y_bin[:, i], model_predict[:, i])
+    
+    return(f1_scores)
+    
+def createSubmission(model, Xtest, filename):
+    #Create submission
+    y_final_prob = model.predict_proba(Xtest)
+    y_final_label = model.predict(Xtest)
+    
+    sample = pd.DataFrame(np.hstack([y_final_prob.round(5),y_final_label.reshape(y_final_prob.shape[0],1)]))
+    sample.columns = ["prob1","prob2","prob3","prob4","label"]
+    sample.label = sample.label.astype(int)
+    
+    #Submit this file to dropbox
+    sample.to_csv(filename,sep="\t" ,index=False, header=None)
+    logger.info('Submission file created: %s' % filename)
+    
+def runRandomForestwithGridSearch(Y, Xtrain, Xtest):
+    
+    # Note time to run this setup 
+    run_start = time.time()
+    
+    # Reduce feature based on importance
+    reduceFeatureswithExtraTrees(Y, Xtrain, Xtest)
+    
+    # Specify the parameters to tune
+    param_grid = {'estimator__n_estimators':[20, 30], 
+                  'estimator__max_depth':[10, 20], 
+                  'estimator__min_samples_split':[4, 6],
+                  'estimator__min_samples_leaf':[2, 4],
+                  'estimator__max_features': ['sqrt', 0.25]}
+    
+    model_to_set = OneVsRestClassifier(RandomForestClassifier(random_state=25, oob_score = True), -1)
+
+    gs_start = time.time()
+    model_tuning = GridSearchCV(model_to_set, 
+                            param_grid = param_grid, 
+                            scoring='f1_weighted',
+                            iid=False)
+    gs_end = time.time()
+    logger.info('Time to run grid search (RandomForest): %0.3fs'% (gs_end - gs_start))
+
+    # Fit the model
+    model_tuning.fit(Xtrain, Y)
+        
+    logger.info('Best score = %d' % model_tuning.best_score_)
+    logger.info('Best params = %s' % model_tuning.best_params_)
+    logger.info('AUC per class = %s' % 
+                getAUCByClass(model_tuning, Xtrain, Y, classes=[1, 2, 3, 4]))
+    logger.info('F1 Score per class = %s' % 
+                getF1ScoreByClass(model_tuning, Xtrain, Y, classes=[1, 2, 3, 4]))
+                
+    # Create results filename 
+    result_fn = 'TeamEastMeetsWest-%s.csv'%file_id  
+    
+    createSubmission(model_tuning, Xtest, result_fn)
+    
+    # Note the end time
+    run_end = time.time()
+    logger.info('Time to run analysis(RandomForest): %0.3fs'% (run_end - run_start))
+
+    
+def runSVMwithGridSearch(Y, Xtrain, Xtest):
+    
+    # Note time to run this setup 
+    run_start = time.time()
+       
+    # Normalize data since accuracy of SVM can severely degrade if it isn't
+    # Scale data to normal distribution (gaussian,  mean = 0, variance = 1)
+    scaler = StandardScaler().fit(Xtrain)
+    X_scaled = scaler.transform(Xtrain)
+    Xtest_scaled = scaler.transform(Xtest)
+    
+    # Reduce feature based on importance
+    reduceFeatureswithExtraTrees(Y, X_scaled, Xtest_scaled)
+    
+    param_grid = {
+        'kernel': ['poly', 'linear', 'sigmoid'],
+        'degree': [2, 4, 5],
+        'gamma': [.1, .25, .5],
+        'C': [.1, .25, .5]
+    }
+    
+    clf = SVC(probability=True, cache_size=1000)
+    
+    gs_start = time.time()
+    clf_tuned = GridSearchCV(clf, param_grid=param_grid)
+    gs_end = time.time()
+    
+    logger.info('Time to run grid search(SVC): %0.3fs'% (gs_end - gs_start))
+
+    # Fit the model
+    clf_tuned.fit(X_scaled, Y)
+
+    logger.info('Best score = %d' % clf_tuned.best_score_)
+    logger.info('Best params = %s' % clf_tuned.best_params_)
+    logger.info('AUC per class = %s' % 
+                getAUCByClass(clf_tuned, X_scaled, Y, classes=[1, 2, 3, 4]))
+    logger.info('F1 Score per class = %s' % 
+                getF1ScoreByClass(clf_tuned, Xtrain, Y, classes=[1, 2, 3, 4]))
+                
+    # Create results filename 
+    result_fn = 'TeamEastMeetsWest-%s.csv'%file_id  
+    
+    # Predict for the test data and create submission
+    createSubmission(clf_tuned, Xtest_scaled, result_fn)
+    
+    run_end = time.time()
+    logger.info('Time to run analysis(SVC): %0.3fs'% (run_end - run_start))
 
 
 def main():
+    
     # Reading files
     read_start = time.time()
     
     # Read in the data
-    X = pd.read_csv("data/trainingData.txt",sep='\t',header=None)
-    Y = pd.read_csv("data/trainingTruth.txt",sep='\t',header=None)
-    Xtest = pd.read_csv("data/testData.txt",sep="\t",header=None)
+    X = pd.read_csv(TRAINING_DATA, sep='\t', header=None)
+    Y = pd.read_csv(TRAINING_TRUTH, sep='\t', header=None)
+    Xtest = pd.read_csv(TEST_DATA, sep="\t", header=None)
     
-    read_end = run_start = time.time()
+    read_end = time.time()
     
+    # Print some timings
+    logger.info('Time to load data: %0.3fs' % (read_end - read_start))
+
+    # Log the size of data
+    logger.info('X.shape: %s, Y.shape: %s, Xtest.shape: %s' %
+        (X.shape, Y.shape, Xtest.shape))
+        
     # Flatten output labels array
     Y = np.array(Y).ravel()
     
@@ -153,88 +322,23 @@ def main():
     # Replace missing values
     replaceMissingValues(X)
     
-    # Reduce feature based on importance
-    reduceFeatureswithExtraTrees(Y, X, Xtest)
+    # Run randomforest classifier with gridsearch
+    #runRandomForestwithGridSearch(Y, X, Xtest)
     
+    # Run SVM classifier with gridsearch
+    runSVMwithGridSearch(Y, X, Xtest)
     
-#    clf = svm.SVC(kernel='linear', C=1)
-#    scores = cross_val_score(clf, X, Y, cv=5)
-#    #Simple K-Fold cross validation. 10 folds.
-#    cv = cross_validation.KFold(len(X), n_folds=10, random_state=41, shuffle=True)
-#    results = []
-#    # "Error_function" can be replaced by the error function of your analysis
-#    for traincv, testcv in cv:
-#        svm.fit(X[traincv], Y[traincv])
-#        svm.predict(X[traincv], Y[traincv])
-#        c1 = svm.score(X[traincv], Y[traincv])
-#        #c2 = svm.score(X[testcv], Y[testcv])
-#        #results.append(svm.score(X[testcv], Y[testcv]))
-#    print(scores)
-#    
-#     If I specify larger number of estimators, it picks the larger ones
-#     So, choosing a smaller number deliberately
-#    param_grid = { 
-#        'estimator__n_estimators': [25, 50],
-#        'estimator__criterion': ['gini', 'entropy'],
-#        'estimator__max_features': ['log2', 'sqrt', 0.25],
-#        'estimator__max_depth': [10, 20, None],
-#        'estimator__oob_score': [True, False]
-#    }
-#    
-#    model_to_set = OneVsRestClassifier(RandomForestClassifier(random_state=25), -1)
-#    
-#    model_tuning = GridSearchCV(model_to_set, param_grid=param_grid, 
-#                                 scoring='f1_weighted')
-#    # Fit the model
-#    model_tuning.fit(X, Y)
-#    print(model_tuning.best_score_)
-#    print(model_tuning.best_params_)
-#    best_params = model_tuning.best_params_
-#    print(getAUCByClass(model_tuning, X, Y, classes=[1, 2, 3, 4]))
-#    
-#       
-#    param_grid = {'estimator__n_estimators':[20,30,40,50], 
-#                  'estimator__max_depth':[3,6,8,12,24,32], 
-#                  'estimator__min_samples_split':[2,4,6],
-#                  'estimator__min_samples_leaf':[1,2,4] }
-#    model_to_set = OneVsRestClassifier(RandomForestClassifier(random_state=25), -1)
-#    model_tuning = GridSearchCV(model_to_set, 
-#                            param_grid = param_grid, 
-#                            scoring='f1_weighted',
-#                            n_jobs=4, iid=False, cv=5)
-#    # Fit the model
-#    model_tuning.fit(X, Y)
-#    
-#    print(model_tuning.best_score_)
-#    print(model_tuning.best_params_)
-#    print(getAUCByClass(model_tuning, X, Y, classes=[1, 2, 3, 4]))
-    
-      
-    model1 = OneVsRestClassifier(RandomForestClassifier(n_estimators = 50, criterion = 'entropy', 
-                                max_depth = 20, max_features= 0.25, random_state=25, oob_score = True), -1)
-    model1.fit(X, Y)
-    print(getAUCByClass(model1, X, Y, classes=[1, 2, 3, 4]))   
-    
-    run_end = time.time()
-    file_id = '%s'%datetime.now().strftime('%m-%d-%Y_%H%M')
-    
-    # Take a note of strategy
-    strategy_fn = 'Strategy-%s.txt'%file_id
-    file = open(strategy_fn, "w")
-    
-    file.write("Missing values = mean, feature selection = ET")
-    file.write("RF = n_estimators = 50, criterion = entropy, max_depth = 20, max_features= 0.25, random_state=25, oob_score = True")
-    file.close()
-    
-    # Create results filename 
-    result_fn = 'TeamEastMeetsWest-%s.csv'%file_id  
-    
-    createSubmission(model1, Xtest, result_fn)
-    
-    # Print some timings
-    print('Time to load data: {:.3f}s'.format(read_end - read_start))
-    print('Time to run analysis: {:.3f}s'.format(run_end - run_start))
-
 if __name__=='__main__':
-    main()
+       
+    # Generate a fileid to identify each run
+    global file_id
+    file_id = '%s'%datetime.now().strftime('%m-%d-%Y_%H%M')
 
+    # initialize logging
+    initLogging()
+    
+    logger.info("Starting run ...")
+    
+    
+    # Call the main function
+    main()
