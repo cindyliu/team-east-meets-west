@@ -242,3 +242,76 @@ Y.shape: (17378, 1)
 Xtest.shape: (8179, 334)
 
 ExtraTreeClassifier: Keeping 97 out of 334 features
+
+=====
+Run started 2016-10-07 20:26:31
+
+SVC settings:
+** Scaled both training and test data this time
+kernel: poly, random_state=25, cache_size=1000
+
+X.shape: (17378, 334)
+Y.shape: (17378, 1)
+Xtest.shape: (8179, 334)
+
+AUC scores by class: {0: 0.99999996986419459, 1: 0.99999992380532221, 2: 0.9999993064743129, 3: 1.0}
+
+Submission file created: TeamEastMeetsWest_20161007-202631.csv
+Time to run analysis: 11285.018s
+
+Run ended 2016-10-1475897768 23:36:08
+
+=====
+Run started 2016-10-08 01:13:21
+
+SVC settings:
+** Scaled both training and test data this time
+** Running grid search on SVC
+kernel: random_state=25, cache_size=1000
+
+X.shape: (100, 334)
+Y.shape: (100, 1)
+Xtest.shape: (100, 334)
+
+ExtraTreeClassifier: Keeping 107 out of 334 features
+best_estimator_:
+SVC(C=0.25, cache_size=1000, class_weight=None, coef0=0.0,
+  decision_function_shape=None, degree=2, gamma=0.1, kernel='sigmoid',
+  max_iter=-1, probability=True, random_state=None, shrinking=True,
+  tol=0.001, verbose=False)
+clf_tuned.best_score_ = 0.69
+clf_tuned.best_params_ = {'C': 0.25, 'degree': 2, 'gamma': 0.1, 'kernel': 'sigmoid'}
+AUC scores by class: {0: 0.90250000000000008, 1: 0.74936580416032472, 2: 0.85448532451426207, 3: 0.54450757575757569}
+
+Time to run grid search: 0.000s
+Time to run analysis: 16.684s
+
+Run ended 2016-10-1475903617 01:13:37
+
+=====
+Run started 2016-10-08 01:15:43
+
+SVC settings:
+** Scaled both training and test data this time
+** Running grid search on SVC
+kernel: random_state=25, cache_size=1000
+
+X.shape: (100, 334)
+Y.shape: (100, 1)
+Xtest.shape: (100, 334)
+
+ExtraTreeClassifier: Keeping 107 out of 334 features
+best_estimator_:
+SVC(C=0.25, cache_size=1000, class_weight=None, coef0=0.0,
+  decision_function_shape=None, degree=2, gamma=0.1, kernel='sigmoid',
+  max_iter=-1, probability=True, random_state=None, shrinking=True,
+  tol=0.001, verbose=False)
+clf_tuned.best_score_ = 0.69
+clf_tuned.best_params_ = {'kernel': 'sigmoid', 'gamma': 0.1, 'degree': 2, 'C': 0.25}
+AUC scores by class: {0: 0.89249999999999996, 1: 0.76610857432775248, 2: 0.85903265812319141, 3: 0.55303030303030309}
+
+Time to run grid search: 0.000s
+Time to run analysis: 15.477s
+
+Run ended 2016-10-1475903759 01:15:59
+

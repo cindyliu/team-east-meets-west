@@ -20,7 +20,7 @@ from sklearn.svm import SVC
 # Ignore warning to present clean output
 warnings.filterwarnings('ignore')
 
-DEBUG = False
+DEBUG = True
 
 if DEBUG:
     TRAINING_DATA = 'trainingDataSubSet.txt'
@@ -93,17 +93,17 @@ def reduceFeatureswithExtraTrees(Y, Xtrain, Xtest):
     
     # Print the feature ranking
     # print("Feature ranking:")
-    # for f in range(X.shape[1]):
+    # for f in range(Xtrain.shape[1]):
     #    print("%d. feature %d (%f)" % (f + 1, indices[f], importances[indices[f]]))
     
     # Plot the feature importances of the forest
-    # plt.figure()
-    # plt.title("Feature importances")
-    # plt.bar(range(Xtrain.shape[1]), importances[indices],
-    #        color="r", yerr=std[indices], align="center")
-    # plt.xticks(range(Xtrain.shape[1]), indices)
-    # plt.xlim([-1, Xtrain.shape[1]])
-    # plt.show()
+    plt.figure()
+    plt.title("Feature importances")
+    plt.bar(range(Xtrain.shape[1]), importances[indices],
+           color="r", yerr=std[indices], align="center")
+    plt.xticks(range(Xtrain.shape[1]), indices)
+    plt.xlim([-1, Xtrain.shape[1]])
+    plt.show()
     
     # select features based on importance weights.
     # by default it uses mean importance as the threshold
@@ -118,6 +118,24 @@ def reduceFeatureswithExtraTrees(Y, Xtrain, Xtest):
     # Reduce dataset to only include selected features    
     Xtrain = selector.transform(Xtrain)
     Xtest = selector.transform(Xtest)   
+
+
+def svc_with_grid_search(X, Y, Xtest):
+    param_grid = {
+        'kernel': ['poly', 'linear', 'sigmoid'],
+        'degree': [2, 4, 5],
+        'gamma': [.1, .25, .5],
+        'C': [.1, .25, .5]
+    }
+
+    clf = SVC(probability=True, cache_size=1000)
+
+    gs_start = time.time()
+    clf_tuned = GridSearchCV(clf, param_grid=param_grid)
+    gs_end = time.time()
+
+    clf_tuned.fit(X, Y)
+    return clf_tuned, gs_start, gs_end
 
 
 def createSubmission(model, Xtest, filename):
@@ -182,40 +200,29 @@ def main():
     Y = np.array(Y).ravel()
 
     # Do some data exploration
-    # exploreData(X_scaled)
+    exploreData(X)
 
     # Replace missing values
     replaceMissingValues(X, 'mean')
+
+    # Reduce feature based on importance
+    reduceFeatureswithExtraTrees(Y, X, Xtest)
 
     # Scale data to normal distribution (gaussian,  mean = 0, variance = 1)
     scaler = StandardScaler().fit(X)
     X_scaled = scaler.transform(X)
     Xtest_scaled = scaler.transform(Xtest)
 
-    # Reduce feature based on importance
-    reduceFeatureswithExtraTrees(Y, X_scaled, Xtest_scaled)
+    model, gs_start, gs_end = svc_with_grid_search(X_scaled, Y, Xtest_scaled)
+    # model = SVC(probability=True, cache_size=1000, random_state=25, kernel='poly')
+    model.fit(X_scaled, Y)
 
-    param_grid = {
-        'kernel': ['poly', 'linear', 'sigmoid'],
-        'degree': [2, 4, 5],
-        'gamma': [.1, .25, .5],
-        'C': [.1, .25, .5]
-    }
-
-    clf = SVC(probability=True, cache_size=1000)
-
-    gs_start = time.time()
-    clf_tuned = GridSearchCV(clf, param_grid=param_grid)
-    gs_end = time.time()
-
-    clf_tuned.fit(X_scaled, Y)
-
-    auc_scores = getAUCByClass(clf_tuned, X_scaled, Y, classes=[1, 2, 3, 4])
+    auc_scores = getAUCByClass(model, X_scaled, Y, classes=[1, 2, 3, 4])
     with open(LOG_FILE, 'a') as f:
         f.write('best_estimator_:\n')
-        f.write(str(clf_tuned.best_estimator_))
-        f.write('\nclf_tuned.best_score_ = {}\n'.format(clf_tuned.best_score_))
-        f.write('clf_tuned.best_params_ = {}\n'.format(str(clf_tuned.best_params_)))
+        f.write(str(model.best_estimator_))
+        f.write('\nclf_tuned.best_score_ = {}\n'.format(model.best_score_))
+        f.write('clf_tuned.best_params_ = {}\n'.format(str(model.best_params_)))
         f.write('AUC scores by class: {}\n\n'.format(str(auc_scores)))
     print(auc_scores)
 
@@ -223,7 +230,7 @@ def main():
 
     with open(LOG_FILE, 'a') as f:
         if not DEBUG:
-            createSubmission(clf, Xtest_scaled, SUBMISSION_FILE)
+            createSubmission(model, Xtest_scaled, SUBMISSION_FILE)
             f.write('Submission file created: {}\n'.format(SUBMISSION_FILE))
         f.write('Time to run grid search: {:.3f}s\n'.format(gs_end - gs_start))
         f.write('Time to run analysis: {:.3f}s\n\n'.format(run_end - run_start))
