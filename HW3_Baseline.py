@@ -9,6 +9,8 @@ import time
 
 from datetime import datetime
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.tree import DecisionTreeClassifier
 from sklearn.preprocessing import label_binarize
 from sklearn.preprocessing import StandardScaler
 from sklearn.multiclass import OneVsRestClassifier
@@ -33,11 +35,16 @@ else:
     TRAINING_DATA = 'trainingData.txt'
     TRAINING_TRUTH = 'trainingTruth.txt'
     TEST_DATA = 'testData.txt'
+
+def initRunID():
+    # Generate an ID to identify each run
+    global g_runID
+    g_runID = '%s'%datetime.now().strftime('%m-%d-%Y_%H%M')
     
-def initLogging():
+def initLogging(name):
     
     # Initialize log confid
-    log_fn = './HW3_run_%s.log'%file_id
+    log_fn = './%s_%s.log'%(name,g_runID)
                         
     # create logger 
     global logger
@@ -68,19 +75,24 @@ def initLogging():
     logger.addHandler(ch)  
     
 def exploreData(X):
-    # Do initial analysis of the data
-    plt.hist(X.var(axis=0))
-    plt.xlabel('variance')
-    plt.ylabel('frequency')
+    # This takes too long with all the rows, so we use a subset
+    # This helps us have a quick look at the feature values
+    sns.heatmap(X[0:10], xticklabels=20, yticklabels=False)
     plt.show()
+    
+    # Do some further analysis of the data to see how it is 
+    # distributed within the range seen above
+    # First check the distribution of column means
     plt.hist(X.mean(axis=0))
     plt.xlabel('mean')
     plt.ylabel('frequency')
     plt.show()
-    
-    # This takes too long with all the rows, so we use a subset
-    # We see a similar range of values in all columns
-    sns.heatmap(X[0:20], xticklabels=20, yticklabels=False)
+
+    # Also check distribuyion of column variance
+    plt.hist(X.var(axis=0))
+    plt.xlabel('variance')
+    plt.ylabel('frequency')
+    plt.show()
 
 def replaceMissingValues(X):
     # Impute missing values, we can choose, mean, median or most frequent
@@ -126,7 +138,6 @@ def reduceFeatureswithExtraTrees(Y, Xtrain, Xtest):
         logger.info("%d. feature %d (%f)" % (f + 1, indices[f], importances[indices[f]]))
     
     # Plot the feature importances of the forest
-    plt.figure()
     plt.title("Feature importances")
     plt.bar(range(Xtrain.shape[1]), importances[indices],
            color="r", yerr=std[indices], align="center")
@@ -221,7 +232,8 @@ def runRandomForestwithGridSearch(Y, Xtrain, Xtest):
     model_tuning = GridSearchCV(model_to_set, 
                             param_grid = param_grid, 
                             scoring='f1_weighted',
-                            iid=False)
+                            iid=False,
+                            n_jobs=-1)
     gs_end = time.time()
     logger.info('Time to run grid search (RandomForest): %0.3fs'% (gs_end - gs_start))
 
@@ -236,7 +248,7 @@ def runRandomForestwithGridSearch(Y, Xtrain, Xtest):
                 getF1ScoreByClass(model_tuning, Xtrain, Y, classes=[1, 2, 3, 4]))
                 
     # Create results filename 
-    result_fn = 'TeamEastMeetsWest-%s.csv'%file_id  
+    result_fn = 'TeamEastMeetsWest-%s.csv'%g_runID  
     
     createSubmission(model_tuning, Xtest, result_fn)
     
@@ -259,17 +271,15 @@ def runSVMwithGridSearch(Y, Xtrain, Xtest):
     # Reduce feature based on importance
     reduceFeatureswithExtraTrees(Y, X_scaled, Xtest_scaled)
     
-    param_grid = {
-        'kernel': ['poly', 'linear', 'sigmoid'],
-        'degree': [2, 4, 5],
-        'gamma': [.1, .25, .5],
-        'C': [.1, .25, .5]
-    }
+    param_grid = [{'kernel': ['rbf'], 'gamma': [1e-2, 1e-3]},
+                  {'kernel': ['linear']},
+                  {'kernel': ['poly'], 'degree': [2, 3]}]
     
-    clf = SVC(probability=True, cache_size=1000)
+    clf = SVC(probability=True)
     
     gs_start = time.time()
-    clf_tuned = GridSearchCV(clf, param_grid=param_grid)
+    clf_tuned = GridSearchCV(clf, param_grid=param_grid, cv=3,
+                       scoring='f1_weighted', n_jobs=-1)
     gs_end = time.time()
     
     logger.info('Time to run grid search(SVC): %0.3fs'% (gs_end - gs_start))
@@ -285,7 +295,7 @@ def runSVMwithGridSearch(Y, Xtrain, Xtest):
                 getF1ScoreByClass(clf_tuned, Xtrain, Y, classes=[1, 2, 3, 4]))
                 
     # Create results filename 
-    result_fn = 'TeamEastMeetsWest-%s.csv'%file_id  
+    result_fn = 'TeamEastMeetsWest-%s.csv'%g_runID  
     
     # Predict for the test data and create submission
     createSubmission(clf_tuned, Xtest_scaled, result_fn)
@@ -293,6 +303,39 @@ def runSVMwithGridSearch(Y, Xtrain, Xtest):
     run_end = time.time()
     logger.info('Time to run analysis(SVC): %0.3fs'% (run_end - run_start))
 
+def runDecisionTreewithAdaboost(Y, Xtrain, Xtest):
+    
+    # Note time to run this setup 
+    run_start = time.time()
+    
+    # Reduce feature based on importance
+    reduceFeatureswithExtraTrees(Y, Xtrain, Xtest)
+    
+    model_start = time.time()
+    model = AdaBoostClassifier(DecisionTreeClassifier(max_depth=2),
+                               n_estimators=50,
+                               learning_rate=1.5,
+                               algorithm="SAMME")
+    model_end = time.time()
+    logger.info('Time to run AdaBoost(DecisionTree): %0.3fs'% (model_end - model_start))
+
+    # Fit the model
+    model.fit(Xtrain, Y)
+        
+    logger.info('Model params = %s' % model.get_params())
+    logger.info('AUC per class = %s' % 
+                getAUCByClass(model, Xtrain, Y, classes=[1, 2, 3, 4]))
+    logger.info('F1 Score per class = %s' % 
+                getF1ScoreByClass(model, Xtrain, Y, classes=[1, 2, 3, 4]))
+                
+    # Create results filename 
+    result_fn = 'TeamEastMeetsWest-%s.csv'%g_runID  
+    
+    createSubmission(model, Xtest, result_fn)
+    
+    # Note the end time
+    run_end = time.time()
+    logger.info('Time to run analysis(AdaBoost): %0.3fs'% (run_end - run_start))
 
 def main():
     
@@ -326,19 +369,20 @@ def main():
     #runRandomForestwithGridSearch(Y, X, Xtest)
     
     # Run SVM classifier with gridsearch
-    runSVMwithGridSearch(Y, X, Xtest)
+    #runSVMwithGridSearch(Y, X, Xtest)
+    
+    # Run DecisionTree classifier with AdaBoost
+    runDecisionTreewithAdaboost(Y, X, Xtest)
     
 if __name__=='__main__':
-       
-    # Generate a fileid to identify each run
-    global file_id
-    file_id = '%s'%datetime.now().strftime('%m-%d-%Y_%H%M')
+    
+    # generate a runid
+    initRunID()
 
     # initialize logging
-    initLogging()
+    initLogging('HW3_run')
     
     logger.info("Starting run ...")
-    
     
     # Call the main function
     main()
