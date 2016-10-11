@@ -13,7 +13,7 @@ from sklearn.preprocessing import label_binarize
 from sklearn.preprocessing import StandardScaler
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.metrics import roc_curve, auc, f1_score
-from sklearn.grid_search import GridSearchCV
+from sklearn.model_selection import GridSearchCV
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.ensemble import ExtraTreesClassifier
 from sklearn.feature_selection import SelectFromModel
@@ -36,7 +36,7 @@ else:
     
 def initLogging():
     
-    # Initialize log confid
+    # Initialize log config
     log_fn = './HW3_run_%s.log'%file_id
                         
     # create logger 
@@ -286,13 +286,48 @@ def runSVMwithGridSearch(Y, Xtrain, Xtest):
                 
     # Create results filename 
     result_fn = 'TeamEastMeetsWest-%s.csv'%file_id  
-    
-    # Predict for the test data and create submission
-    createSubmission(clf_tuned, Xtest_scaled, result_fn)
+
+    if not DEBUG:
+        # Predict for the test data and create submission
+        createSubmission(clf_tuned, Xtest_scaled, result_fn)
     
     run_end = time.time()
     logger.info('Time to run analysis(SVC): %0.3fs'% (run_end - run_start))
 
+def runSVM(Y, Xtrain, Xtest):
+    # Note time to run this setup
+    run_start = time.time()
+
+    # Normalize data since accuracy of SVM can severely degrade if it isn't
+    # Scale data to normal distribution (gaussian,  mean = 0, variance = 1)
+    scaler = StandardScaler().fit(Xtrain)
+    X_scaled = scaler.transform(Xtrain)
+    Xtest_scaled = scaler.transform(Xtest)
+
+    # Reduce feature based on importance
+    reduceFeatureswithExtraTrees(Y, X_scaled, Xtest_scaled)
+
+    # Guessing on these parameters because running with gridsearch took much too long, so I'm
+    #   using the results of smaller runs (largest size = first 5000 rows of training dataset)
+    clf = SVC(probability=True, cache_size=1000, C=0.1, kernel='sigmoid', gamma=0.1, class_weight='balanced')
+
+    # Fit the model
+    clf.fit(X_scaled, Y)
+
+    logger.info('AUC per class = %s' %
+                getAUCByClass(clf, X_scaled, Y, classes=[1, 2, 3, 4]))
+    logger.info('F1 Score per class = %s' %
+                getF1ScoreByClass(clf, Xtrain, Y, classes=[1, 2, 3, 4]))
+
+    # Create results filename
+    result_fn = 'TeamEastMeetsWest-%s.csv' % file_id
+
+    if not DEBUG:
+        # Predict for the test data and create submission
+        createSubmission(clf, Xtest_scaled, result_fn)
+
+    run_end = time.time()
+    logger.info('Time to run analysis(SVC): %0.3fs' % (run_end - run_start))
 
 def main():
     
@@ -326,8 +361,11 @@ def main():
     #runRandomForestwithGridSearch(Y, X, Xtest)
     
     # Run SVM classifier with gridsearch
-    runSVMwithGridSearch(Y, X, Xtest)
-    
+    # runSVMwithGridSearch(Y, X, Xtest)
+
+    # Run SVM classifier without gridsearch
+    runSVM(Y, X, Xtest)
+
 if __name__=='__main__':
        
     # Generate a fileid to identify each run
