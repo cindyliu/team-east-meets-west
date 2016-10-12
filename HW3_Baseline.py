@@ -31,10 +31,12 @@ if DEBUG:
     TRAINING_DATA = 'trainingDataSubSet.txt'
     TRAINING_TRUTH = 'trainingTruthSubSet.txt'
     TEST_DATA = 'testDataSubSet.txt'
+    BLIND_DATA = 'blindDataSubset.txt'
 else:
     TRAINING_DATA = 'trainingData.txt'
     TRAINING_TRUTH = 'trainingTruth.txt'
     TEST_DATA = 'testData.txt'
+    BLIND_DATA = 'blindData.txt'
 
 def initRunID():
     # Generate an ID to identify each run
@@ -198,7 +200,7 @@ def getF1ScoreByClass(model, X, Y, classes=[1, 2, 3, 4]):
     
     return(f1_scores)
     
-def createSubmission(model, Xtest, filename):
+def createSubmission(model, Xtest, isBlind):
     #Create submission
     y_final_prob = model.predict_proba(Xtest)
     y_final_label = model.predict(Xtest)
@@ -206,12 +208,15 @@ def createSubmission(model, Xtest, filename):
     sample = pd.DataFrame(np.hstack([y_final_prob.round(5),y_final_label.reshape(y_final_prob.shape[0],1)]))
     sample.columns = ["prob1","prob2","prob3","prob4","label"]
     sample.label = sample.label.astype(int)
-    
+        
+    # Create results filename 
+    filename = 'TeamEastMeetsWest-%s-%s.csv'%('blind' if isBlind else 'test', g_runID) 
+
     #Submit this file to dropbox
     sample.to_csv(filename,sep="\t" ,index=False, header=None)
     logger.info('Submission file created: %s' % filename)
     
-def runRandomForestwithGridSearch(Y, Xtrain, Xtest):
+def runRandomForestwithGridSearch(Y, Xtrain, Xtest, isBlind):
     
     # Note time to run this setup 
     run_start = time.time()
@@ -221,7 +226,7 @@ def runRandomForestwithGridSearch(Y, Xtrain, Xtest):
     
     # Specify the parameters to tune
     param_grid = {'estimator__n_estimators':[20, 30], 
-                  'estimator__max_depth':[10, 20], 
+                  'estimator__max_depth':[10, 15], 
                   'estimator__min_samples_split':[4, 6],
                   'estimator__min_samples_leaf':[2, 4],
                   'estimator__max_features': ['sqrt', 0.25]}
@@ -247,17 +252,15 @@ def runRandomForestwithGridSearch(Y, Xtrain, Xtest):
     logger.info('F1 Score per class = %s' % 
                 getF1ScoreByClass(model_tuning, Xtrain, Y, classes=[1, 2, 3, 4]))
                 
-    # Create results filename 
-    result_fn = 'TeamEastMeetsWest-%s.csv'%g_runID  
-    
-    createSubmission(model_tuning, Xtest, result_fn)
+    # Create submission file    
+    createSubmission(model_tuning, Xtest, isBlind)
     
     # Note the end time
     run_end = time.time()
     logger.info('Time to run analysis(RandomForest): %0.3fs'% (run_end - run_start))
 
     
-def runSVMwithGridSearch(Y, Xtrain, Xtest):
+def runSVMwithGridSearch(Y, Xtrain, Xtest, isBlind):
     
     # Note time to run this setup 
     run_start = time.time()
@@ -293,17 +296,14 @@ def runSVMwithGridSearch(Y, Xtrain, Xtest):
                 getAUCByClass(clf_tuned, X_scaled, Y, classes=[1, 2, 3, 4]))
     logger.info('F1 Score per class = %s' % 
                 getF1ScoreByClass(clf_tuned, Xtrain, Y, classes=[1, 2, 3, 4]))
-                
-    # Create results filename 
-    result_fn = 'TeamEastMeetsWest-%s.csv'%g_runID  
     
     # Predict for the test data and create submission
-    createSubmission(clf_tuned, Xtest_scaled, result_fn)
+    createSubmission(clf_tuned, Xtest_scaled, isBlind)
     
     run_end = time.time()
     logger.info('Time to run analysis(SVC): %0.3fs'% (run_end - run_start))
 
-def runDecisionTreewithAdaboost(Y, Xtrain, Xtest):
+def runDecisionTreewithAdaboost(Y, Xtrain, Xtest, isBlind):
     
     # Note time to run this setup 
     run_start = time.time()
@@ -313,7 +313,7 @@ def runDecisionTreewithAdaboost(Y, Xtrain, Xtest):
     
     model_start = time.time()
     model = AdaBoostClassifier(DecisionTreeClassifier(max_depth=2),
-                               n_estimators=50,
+                               n_estimators=200,
                                learning_rate=1.5,
                                algorithm="SAMME")
     model_end = time.time()
@@ -328,10 +328,8 @@ def runDecisionTreewithAdaboost(Y, Xtrain, Xtest):
     logger.info('F1 Score per class = %s' % 
                 getF1ScoreByClass(model, Xtrain, Y, classes=[1, 2, 3, 4]))
                 
-    # Create results filename 
-    result_fn = 'TeamEastMeetsWest-%s.csv'%g_runID  
-    
-    createSubmission(model, Xtest, result_fn)
+    # Create submission file    
+    createSubmission(model, Xtest, isBlind)
     
     # Note the end time
     run_end = time.time()
@@ -346,6 +344,9 @@ def main():
     X = pd.read_csv(TRAINING_DATA, sep='\t', header=None)
     Y = pd.read_csv(TRAINING_TRUTH, sep='\t', header=None)
     Xtest = pd.read_csv(TEST_DATA, sep="\t", header=None)
+    Xblind = pd.read_csv(BLIND_DATA, sep="\t", header=None)
+    # Drop the last column for the Blind data set
+    Xblind.drop(Xblind.columns[334], axis=1, inplace=True)
     
     read_end = time.time()
     
@@ -353,8 +354,8 @@ def main():
     logger.info('Time to load data: %0.3fs' % (read_end - read_start))
 
     # Log the size of data
-    logger.info('X.shape: %s, Y.shape: %s, Xtest.shape: %s' %
-        (X.shape, Y.shape, Xtest.shape))
+    logger.info('X.shape: %s, Y.shape: %s, Xtest.shape: %s, Xblind.shape: %s' %
+        (X.shape, Y.shape, Xtest.shape, Xblind.shape))
         
     # Flatten output labels array
     Y = np.array(Y).ravel()
@@ -366,13 +367,13 @@ def main():
     replaceMissingValues(X)
     
     # Run randomforest classifier with gridsearch
-    #runRandomForestwithGridSearch(Y, X, Xtest)
+    #runRandomForestwithGridSearch(Y, X, Xtest, True)
     
     # Run SVM classifier with gridsearch
-    #runSVMwithGridSearch(Y, X, Xtest)
+    runSVMwithGridSearch(Y, X, Xblind, True)
     
     # Run DecisionTree classifier with AdaBoost
-    runDecisionTreewithAdaboost(Y, X, Xtest)
+    #runDecisionTreewithAdaboost(Y, X, Xtest, True)
     
 if __name__=='__main__':
     
