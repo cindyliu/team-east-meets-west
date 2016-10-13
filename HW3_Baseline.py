@@ -27,16 +27,7 @@ warnings.filterwarnings('ignore')
 
 # Added ability to debug with smaller datasets
 DEBUG = False
-if DEBUG:
-    TRAINING_DATA = 'trainingDataSubSet.txt'
-    TRAINING_TRUTH = 'trainingTruthSubSet.txt'
-    TEST_DATA = 'testDataSubSet.txt'
-    BLIND_DATA = 'blindDataSubset.txt'
-else:
-    TRAINING_DATA = 'trainingData.txt'
-    TRAINING_TRUTH = 'trainingTruth.txt'
-    TEST_DATA = 'testData.txt'
-    BLIND_DATA = 'blindData.txt'
+DEBUG_FILESIZES = 500
 
 def initRunID():
     # Generate an ID to identify each run
@@ -75,6 +66,27 @@ def initLogging(name):
     # add the handlers to the logger
     logger.addHandler(fh)
     logger.addHandler(ch)  
+    
+def createDataFileSubsets(rowsToCopy, sTrain, sTruth, sTest, sBlind):
+    # Name the data subsets to be created
+    sTrain_sub = 'trainingDataSubSet.txt'
+    sTruth_sub = 'trainingTruthSubSet.txt'
+    sTest_sub = 'testDataSubSet.txt'
+    sBlind_sub = 'blindDataSubSet.txt'
+    
+    # Create a list of files to read from and the corresponding files to write to
+    data_in = [sTrain, sTruth, sTest, sBlind]
+    data_out = [sTrain_sub, sTruth_sub, sTest_sub, sBlind_sub]
+
+    # Read in the files and write out a subset
+    for i, data_set in enumerate(data_in):
+        with open(data_set, 'r') as inf:
+            with open(data_out[i], 'w') as outf:
+                for row in range(rowsToCopy):
+                    outf.write(inf.readline())
+    
+    # Return the new filenames
+    return (sTrain_sub, sTruth_sub, sTest_sub, sBlind_sub)
     
 def exploreData(X):
     # This takes too long with all the rows, so we use a subset
@@ -230,21 +242,21 @@ def runRandomForestwithGridSearch(Y, Xtrain, Xtest, isBlind):
                   'estimator__min_samples_split':[4, 6],
                   'estimator__min_samples_leaf':[2, 4],
                   'estimator__max_features': ['sqrt', 0.25]}
-    
-    model_to_set = OneVsRestClassifier(RandomForestClassifier(random_state=25, oob_score = True), -1)
 
     gs_start = time.time()
+    model_to_set = OneVsRestClassifier(RandomForestClassifier(random_state=25, oob_score = True), -1)
+
     model_tuning = GridSearchCV(model_to_set, 
                             param_grid = param_grid, 
                             scoring='f1_weighted',
                             iid=False,
                             n_jobs=-1)
-    gs_end = time.time()
-    logger.info('Time to run grid search (RandomForest): %0.3fs'% (gs_end - gs_start))
-
     # Fit the model
     model_tuning.fit(Xtrain, Y)
         
+    gs_end = time.time()
+    logger.info('Time to run grid search (RandomForest): %0.3fs'% (gs_end - gs_start))
+
     logger.info('Best score = %d' % model_tuning.best_score_)
     logger.info('Best params = %s' % model_tuning.best_params_)
     logger.info('AUC per class = %s' % 
@@ -274,21 +286,21 @@ def runSVMwithGridSearch(Y, Xtrain, Xtest, isBlind):
     # Reduce feature based on importance
     reduceFeatureswithExtraTrees(Y, X_scaled, Xtest_scaled)
     
+    gs_start = time.time()
     param_grid = [{'kernel': ['rbf'], 'gamma': [1e-2, 1e-3]},
                   {'kernel': ['linear']},
                   {'kernel': ['poly'], 'degree': [2, 3]}]
     
     clf = SVC(probability=True)
     
-    gs_start = time.time()
     clf_tuned = GridSearchCV(clf, param_grid=param_grid, cv=3,
                        scoring='f1_weighted', n_jobs=-1)
-    gs_end = time.time()
     
-    logger.info('Time to run grid search(SVC): %0.3fs'% (gs_end - gs_start))
-
     # Fit the model
     clf_tuned.fit(X_scaled, Y)
+    
+    gs_end = time.time()
+    logger.info('Time to run grid search(SVC): %0.3fs'% (gs_end - gs_start))
 
     logger.info('Best score = %d' % clf_tuned.best_score_)
     logger.info('Best params = %s' % clf_tuned.best_params_)
@@ -312,15 +324,15 @@ def runDecisionTreewithAdaboost(Y, Xtrain, Xtest, isBlind):
     reduceFeatureswithExtraTrees(Y, Xtrain, Xtest)
     
     model_start = time.time()
-    model = AdaBoostClassifier(DecisionTreeClassifier(max_depth=2),
+    model = AdaBoostClassifier(DecisionTreeClassifier(max_depth=10),
                                n_estimators=200,
                                learning_rate=1.5,
                                algorithm="SAMME")
-    model_end = time.time()
-    logger.info('Time to run AdaBoost(DecisionTree): %0.3fs'% (model_end - model_start))
-
     # Fit the model
     model.fit(Xtrain, Y)
+    
+    model_end = time.time()
+    logger.info('Time to run AdaBoost(DecisionTree): %0.3fs'% (model_end - model_start))
         
     logger.info('Model params = %s' % model.get_params())
     logger.info('AUC per class = %s' % 
@@ -337,14 +349,27 @@ def runDecisionTreewithAdaboost(Y, Xtrain, Xtest, isBlind):
 
 def main():
     
+    # Specify the data files we need
+    sTrain = 'trainingData.txt'
+    sTruth = 'trainingTruth.txt'
+    sTest = 'testData.txt'
+    sBlind = 'blindData.txt'
+
+    # Create a smaller set of files to use for debugging, and update 
+    # file names to point to the new set
+    if (DEBUG):
+        (sTrain, sTruth, sTest, sBlind) = createDataFileSubsets(DEBUG_FILESIZES, sTrain, sTruth, sTest, sBlind)
+    
     # Reading files
     read_start = time.time()
     
+    logger.info('Reading files - %s, %s, %s and %s' % (sTrain, sTruth, sTest, sBlind))
+
     # Read in the data
-    X = pd.read_csv(TRAINING_DATA, sep='\t', header=None)
-    Y = pd.read_csv(TRAINING_TRUTH, sep='\t', header=None)
-    Xtest = pd.read_csv(TEST_DATA, sep="\t", header=None)
-    Xblind = pd.read_csv(BLIND_DATA, sep="\t", header=None)
+    X = pd.read_csv(sTrain, sep='\t', header=None)
+    Y = pd.read_csv(sTruth, sep='\t', header=None)
+    Xtest = pd.read_csv(sTest, sep="\t", header=None)
+    Xblind = pd.read_csv(sBlind, sep="\t", header=None)
     # Drop the last column for the Blind data set
     Xblind.drop(Xblind.columns[334], axis=1, inplace=True)
     
@@ -370,10 +395,10 @@ def main():
     #runRandomForestwithGridSearch(Y, X, Xtest, True)
     
     # Run SVM classifier with gridsearch
-    runSVMwithGridSearch(Y, X, Xblind, True)
+    #runSVMwithGridSearch(Y, X, Xblind, True)
     
     # Run DecisionTree classifier with AdaBoost
-    #runDecisionTreewithAdaboost(Y, X, Xtest, True)
+    runDecisionTreewithAdaboost(Y, X, Xtest, False)
     
 if __name__=='__main__':
     
