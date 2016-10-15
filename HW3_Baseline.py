@@ -21,6 +21,7 @@ from sklearn.ensemble import ExtraTreesClassifier
 from sklearn.feature_selection import SelectFromModel
 from sklearn.preprocessing import Imputer
 from sklearn.svm import SVC
+#from fancyimpute import KNN
 
 # Set the parameters for Matplotlib figure size
 # for the rest of the Notebook as in section notes
@@ -33,7 +34,7 @@ plt.rcParams["figure.figsize"] = fig_size
 warnings.filterwarnings('ignore')
 
 # Added ability to debug with smaller datasets
-DEBUG = True
+DEBUG = False
 DEBUG_FILESIZES = 1000
 
 def initRunID():
@@ -94,6 +95,49 @@ def createDataFileSubsets(rowsToCopy, sTrain, sTruth, sTest, sBlind):
     
     # Return the new filenames
     return (sTrain_sub, sTruth_sub, sTest_sub, sBlind_sub)
+    
+def readData(sTrain, sTruth, sTest, sBlind):
+    # Reading files
+    read_start = time.time()
+    
+    logger.info('Reading files - %s, %s, %s and %s' % (sTrain, sTruth, sTest, sBlind))
+
+    # Read in the data
+    X = pd.read_csv(sTrain, sep='\t', header=None)
+    Y = pd.read_csv(sTruth, sep='\t', header=None)
+    # Flatten output labels array
+    Y = np.array(Y).ravel()
+    Xtest = pd.read_csv(sTest, sep="\t", header=None)
+    Xblind = pd.read_csv(sBlind, sep="\t", header=None)
+    # Drop the last column for the Blind data set
+    Xblind.drop(Xblind.columns[334], axis=1, inplace=True)
+    
+    read_end = time.time()
+    
+    # Print some timings
+    logger.info('Time to load data: %0.3fs' % (read_end - read_start))
+    
+    # Log the size of data
+    logger.info('X.shape: %s, Y.shape: %s, Xtest.shape: %s, Xblind.shape: %s' %
+        (X.shape, Y.shape, Xtest.shape, Xblind.shape))
+    
+    return (X, Y, Xtest, Xblind)
+
+def createSubmission(model, Xtest, isBlind):
+    #Create submission
+    y_final_prob = model.predict_proba(Xtest)
+    y_final_label = model.predict(Xtest)
+    
+    sample = pd.DataFrame(np.hstack([y_final_prob.round(5),y_final_label.reshape(y_final_prob.shape[0],1)]))
+    sample.columns = ["prob1","prob2","prob3","prob4","label"]
+    sample.label = sample.label.astype(int)
+        
+    # Create results filename 
+    filename = 'TeamEastMeetsWest-%s-%s.csv'%('blind' if isBlind else 'test', g_runID) 
+
+    #Submit this file to dropbox
+    sample.to_csv(filename,sep="\t" ,index=False, header=None)
+    logger.info('Submission file created: %s' % filename)
             
 def exploreData(X):
     # This takes too long with all the rows, so we use a subset
@@ -157,8 +201,7 @@ def replaceMissingValues(X, strategy):
 def replaceMissingValueswFancyImpute(X):
     # Use 3 nearest rows which have a feature to fill in each row's missing features
     knnImpute = KNN(k=3)
-    X_imputed = knnImpute.complete(X)
-    return X_imputed
+    X = knnImpute.complete(X)
 
 def reduceFeaturesbyVariance(Xtrain, Xtest, threshold = 0.22):
     # one way of removing low importance features is to 
@@ -259,22 +302,6 @@ def getF1ScoreByClass(model, X, Y, classes=[1, 2, 3, 4]):
     
     return(f1_scores)
     
-def createSubmission(model, Xtest, isBlind):
-    #Create submission
-    y_final_prob = model.predict_proba(Xtest)
-    y_final_label = model.predict(Xtest)
-    
-    sample = pd.DataFrame(np.hstack([y_final_prob.round(5),y_final_label.reshape(y_final_prob.shape[0],1)]))
-    sample.columns = ["prob1","prob2","prob3","prob4","label"]
-    sample.label = sample.label.astype(int)
-        
-    # Create results filename 
-    filename = 'TeamEastMeetsWest-%s-%s.csv'%('blind' if isBlind else 'test', g_runID) 
-
-    #Submit this file to dropbox
-    sample.to_csv(filename,sep="\t" ,index=False, header=None)
-    logger.info('Submission file created: %s' % filename)
-    
 def runRandomForestwithGridSearch(Y, Xtrain, Xtest, isBlind):
     
     # Note time to run this setup 
@@ -355,7 +382,7 @@ def runSVMwithGridSearch(Y, Xtrain, Xtest, isBlind):
     logger.info('AUC per class = %s' % 
                 getAUCByClass(clf_tuned, X_scaled, Y, classes=[1, 2, 3, 4]))
     logger.info('F1 Score per class = %s' % 
-                getF1ScoreByClass(clf_tuned, Xtrain, Y, classes=[1, 2, 3, 4]))
+                getF1ScoreByClass(clf_tuned, X_scaled, Y, classes=[1, 2, 3, 4]))
     
     # Predict for the test data and create submission
     createSubmission(clf_tuned, Xtest_scaled, isBlind)
@@ -372,24 +399,35 @@ def runDecisionTreewithAdaboost(Y, Xtrain, Xtest, isBlind):
     (Xtrain, Xtest) = reduceFeatureswithExtraTrees(Y, Xtrain, Xtest)
     
     model_start = time.time()
-    model = AdaBoostClassifier(DecisionTreeClassifier(max_depth=10),
-                               n_estimators=200,
-                               learning_rate=1.5,
-                               algorithm="SAMME")
+       
+    # Specify parameters for GridSearch
+    param_grid = {'base_estimator__criterion' : ["gini", "entropy"], 
+                  'base_estimator__max_depth':[8, 10], 
+                  'base_estimator__max_features':['sqrt', 0.25],
+                  'n_estimators': [25, 30],
+                  'learning_rate': [0.8, 1.0]}
+
+    dtc = DecisionTreeClassifier(random_state = 11, max_features = "auto", 
+                                 class_weight = "balanced")
+    abc = AdaBoostClassifier(base_estimator = dtc, algorithm="SAMME.R")
+    
+    # run grid search
+    abc_tuned = GridSearchCV(abc, param_grid=param_grid, scoring='f1_weighted')
+
     # Fit the model
-    model.fit(Xtrain, Y)
+    abc_tuned.fit(Xtrain, Y)
     
     model_end = time.time()
-    logger.info('Time to run AdaBoost(DecisionTree): %0.3fs'% (model_end - model_start))
+    logger.info('Time to run Gridsearch with AdaBoost(DecisionTree): %0.3fs'% (model_end - model_start))
         
-    logger.info('Model params = %s' % model.get_params())
+    logger.info('Model params = %s' % abc_tuned.get_params())
     logger.info('AUC per class = %s' % 
-                getAUCByClass(model, Xtrain, Y, classes=[1, 2, 3, 4]))
+                getAUCByClass(abc_tuned, Xtrain, Y, classes=[1, 2, 3, 4]))
     logger.info('F1 Score per class = %s' % 
-                getF1ScoreByClass(model, Xtrain, Y, classes=[1, 2, 3, 4]))
+                getF1ScoreByClass(abc_tuned, Xtrain, Y, classes=[1, 2, 3, 4]))
                 
     # Create submission file    
-    createSubmission(model, Xtest, isBlind)
+    createSubmission(abc_tuned, Xtest, isBlind)
     
     # Note the end time
     run_end = time.time()
@@ -408,29 +446,7 @@ def main():
     if (DEBUG):
         (sTrain, sTruth, sTest, sBlind) = createDataFileSubsets(DEBUG_FILESIZES, sTrain, sTruth, sTest, sBlind)
     
-    # Reading files
-    read_start = time.time()
-    
-    logger.info('Reading files - %s, %s, %s and %s' % (sTrain, sTruth, sTest, sBlind))
-
-    # Read in the data
-    X = pd.read_csv(sTrain, sep='\t', header=None)
-    Y = pd.read_csv(sTruth, sep='\t', header=None)
-    # Flatten output labels array
-    Y = np.array(Y).ravel()
-    Xtest = pd.read_csv(sTest, sep="\t", header=None)
-    Xblind = pd.read_csv(sBlind, sep="\t", header=None)
-    # Drop the last column for the Blind data set
-    Xblind.drop(Xblind.columns[334], axis=1, inplace=True)
-    
-    read_end = time.time()
-    
-    # Print some timings
-    logger.info('Time to load data: %0.3fs' % (read_end - read_start))
-
-    # Log the size of data
-    logger.info('X.shape: %s, Y.shape: %s, Xtest.shape: %s, Xblind.shape: %s' %
-        (X.shape, Y.shape, Xtest.shape, Xblind.shape))
+    (X, Y, Xtest, Xblind) = readData(sTrain, sTruth, sTest, sBlind)
     
     # Do some data exploration
     exploreData(X)
@@ -439,24 +455,21 @@ def main():
     plotFeatureHistograms(X, 48, 4, 4)
     
     # Look at the correlations
-    #plotFeatureCorrelations(X)
+    plotFeatureCorrelations(X)
     
     # Impute missing values, we can choose, mean, median or most frequent
     # Choosing mean as we didn't notice skewness in the attribute distribution
     replaceMissingValues(X, strategy = 'mean')
-    #from fancyimpute import KNN
-    #X = replaceMissingValueswFancyImpute(X)
     
-    (train_varreduced, test_varreduced) = reduceFeaturesbyVariance(X, Xtest, 0.22)
-
-    # Reduce features using tree based model
-    (train_treereduced, test_treereduced) = reduceFeatureswithExtraTrees(Y, X, Xtest)
+    # Fancyimpute requires installation of other packages
+    # We ca use this or the simple imputation shown above
+    #replaceMissingValueswFancyImpute(X)
     
     # Run randomforest classifier with gridsearch
     #runRandomForestwithGridSearch(Y, X, Xtest, False)
     
     # Run SVM classifier with gridsearch
-    #runSVMwithGridSearch(Y, X, Xtest, False)
+    runSVMwithGridSearch(Y, X, Xblind, True)
     
     # Run DecisionTree classifier with AdaBoost
     #runDecisionTreewithAdaboost(Y, X, Xtest, False)
