@@ -22,12 +22,19 @@ from sklearn.feature_selection import SelectFromModel
 from sklearn.preprocessing import Imputer
 from sklearn.svm import SVC
 
+# Set the parameters for Matplotlib figure size
+# for the rest of the Notebook as in section notes
+fig_size = plt.rcParams["figure.figsize"]
+fig_size[0] = 10
+fig_size[1] = 6
+plt.rcParams["figure.figsize"] = fig_size
+
 # Ignore warning to present clean output
 warnings.filterwarnings('ignore')
 
 # Added ability to debug with smaller datasets
-DEBUG = False
-DEBUG_FILESIZES = 500
+DEBUG = True
+DEBUG_FILESIZES = 1000
 
 def initRunID():
     # Generate an ID to identify each run
@@ -55,7 +62,7 @@ def initLogging(name):
     
     # create console handler with a higher log level
     ch = logging.StreamHandler()
-    ch.setLevel(logging.ERROR)
+    ch.setLevel(logging.DEBUG)
     
     # create formatter and add it to the handlers
     formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s',
@@ -87,7 +94,7 @@ def createDataFileSubsets(rowsToCopy, sTrain, sTruth, sTest, sBlind):
     
     # Return the new filenames
     return (sTrain_sub, sTruth_sub, sTest_sub, sBlind_sub)
-    
+            
 def exploreData(X):
     # This takes too long with all the rows, so we use a subset
     # This helps us have a quick look at the feature values
@@ -107,14 +114,51 @@ def exploreData(X):
     plt.xlabel('variance')
     plt.ylabel('frequency')
     plt.show()
+    
+def plotFeatureHistograms(X, total_rows, nrows, ncols):
+    # Make sure the total_rows we want is not larger than data size
+    total_rows = total_rows if total_rows < X.shape[1] else X.shape[1]
+    
+    # Calculate number of iteration needed to get through all columns
+    total_plots = nrows*ncols
+    num_iterations = int(total_rows/total_plots + (1 if total_rows%total_plots != 0 else 0))
+    start = cur = 0
+    
+    # Draw a nrows x ncols grid till we run out of rows
+    for i in range(num_iterations):
+        cur = start*total_plots
+        fig = plt.figure()
+        for j in range(total_plots):
+            if (cur+j >= total_rows):
+                break
+            ax=fig.add_subplot(nrows, ncols, j+1)
+            X[cur+j].hist(ax=ax)
+        fig.tight_layout()
+        plt.show()
+        start += 1
+        
+def plotFeatureCorrelations(X):
+    sns.set(context="paper", font="monospace")
 
-def replaceMissingValues(X):
-    # Impute missing values, we can choose, mean, median or most frequent
-    # Choosing mean as a standard
-    strategy = 'mean'
+    corrmat = X.corr()
+    # Set up the matplotlib figure
+    f, ax = plt.subplots(figsize=(14, 10))
+
+    # Draw the heatmap using seaborn
+    _ = sns.heatmap(corrmat, vmax=.8, square=True)
+
+def replaceMissingValues(X, strategy):
+    # Impute missing values based on the strategy passed in
+    # Strategy can be 'mean', 'median' or 'most_frequent'
     imp = Imputer(missing_values='NaN', copy=False, strategy=strategy, axis=0)
     imp.fit_transform(X)   
     logger.info('Missing values replaced using %s' % strategy)
+    
+def replaceMissingValueswFancyImpute(X):
+    # Use 3 nearest rows which have a feature to fill in each row's missing features
+    knnImpute = KNN(k=3)
+    X_imputed = knnImpute.complete(X)
+    return X_imputed
 
 def reduceFeaturesbyVariance(Xtrain, Xtest, threshold = 0.22):
     # one way of removing low importance features is to 
@@ -130,8 +174,10 @@ def reduceFeaturesbyVariance(Xtrain, Xtest, threshold = 0.22):
                 % (threshold, len(kept_features), Xtrain.shape[1]))
 
     # Reduce dataset to only include selected features
-    Xtrain = selector.transform(Xtrain)
-    Xtest = selector.transform(Xtest)
+    train_reduced = selector.transform(Xtrain)
+    test_reduced = selector.transform(Xtest)
+    
+    return (train_reduced, test_reduced)
     
 def reduceFeatureswithExtraTrees(Y, Xtrain, Xtest):
     # Build a forest and compute the feature importances
@@ -174,8 +220,9 @@ def reduceFeatureswithExtraTrees(Y, Xtrain, Xtest):
                 (len(kept_features), Xtrain.shape[1]))
             
     # Reduce dataset to only include selected features    
-    Xtrain = selector.transform(Xtrain)
-    Xtest = selector.transform(Xtest)   
+    train_reduced = selector.transform(Xtrain)
+    test_reduced = selector.transform(Xtest)
+    return (train_reduced, test_reduced)
     
 def getAUCByClass(model, X, Y, classes=[1, 2, 3, 4]):
     
@@ -234,13 +281,13 @@ def runRandomForestwithGridSearch(Y, Xtrain, Xtest, isBlind):
     run_start = time.time()
     
     # Reduce feature based on importance
-    reduceFeatureswithExtraTrees(Y, Xtrain, Xtest)
+    (Xtrain, Xtest) = reduceFeatureswithExtraTrees(Y, Xtrain, Xtest)
     
     # Specify the parameters to tune
-    param_grid = {'estimator__n_estimators':[20, 30], 
-                  'estimator__max_depth':[10, 15], 
-                  'estimator__min_samples_split':[4, 6],
-                  'estimator__min_samples_leaf':[2, 4],
+    param_grid = {'estimator__n_estimators':[15, 20], 
+                  'estimator__max_depth':[8, 10], 
+                  'estimator__min_samples_split':[50, 100],
+                  'estimator__min_samples_leaf':[10, 20],
                   'estimator__max_features': ['sqrt', 0.25]}
 
     gs_start = time.time()
@@ -284,11 +331,12 @@ def runSVMwithGridSearch(Y, Xtrain, Xtest, isBlind):
     Xtest_scaled = scaler.transform(Xtest)
     
     # Reduce feature based on importance
-    reduceFeatureswithExtraTrees(Y, X_scaled, Xtest_scaled)
+    (X_scaled, Xtest_scaled) = reduceFeatureswithExtraTrees(Y, X_scaled, Xtest_scaled)
     
     gs_start = time.time()
-    param_grid = [{'kernel': ['rbf'], 'gamma': [1e-2, 1e-3]},
-                  {'kernel': ['linear']},
+    # Use default values for C and other parameters
+    param_grid = [{'kernel': ['rbf'], 'gamma': [0.01, 0.1]},
+                  #{'kernel': ['linear']},
                   {'kernel': ['poly'], 'degree': [2, 3]}]
     
     clf = SVC(probability=True)
@@ -321,7 +369,7 @@ def runDecisionTreewithAdaboost(Y, Xtrain, Xtest, isBlind):
     run_start = time.time()
     
     # Reduce feature based on importance
-    reduceFeatureswithExtraTrees(Y, Xtrain, Xtest)
+    (Xtrain, Xtest) = reduceFeatureswithExtraTrees(Y, Xtrain, Xtest)
     
     model_start = time.time()
     model = AdaBoostClassifier(DecisionTreeClassifier(max_depth=10),
@@ -368,6 +416,8 @@ def main():
     # Read in the data
     X = pd.read_csv(sTrain, sep='\t', header=None)
     Y = pd.read_csv(sTruth, sep='\t', header=None)
+    # Flatten output labels array
+    Y = np.array(Y).ravel()
     Xtest = pd.read_csv(sTest, sep="\t", header=None)
     Xblind = pd.read_csv(sBlind, sep="\t", header=None)
     # Drop the last column for the Blind data set
@@ -381,24 +431,35 @@ def main():
     # Log the size of data
     logger.info('X.shape: %s, Y.shape: %s, Xtest.shape: %s, Xblind.shape: %s' %
         (X.shape, Y.shape, Xtest.shape, Xblind.shape))
-        
-    # Flatten output labels array
-    Y = np.array(Y).ravel()
     
     # Do some data exploration
     exploreData(X)
     
-    # Replace missing values
-    replaceMissingValues(X)
+    # Look at the histogram of the first 48 rows in 4x4 grids
+    plotFeatureHistograms(X, 48, 4, 4)
+    
+    # Look at the correlations
+    #plotFeatureCorrelations(X)
+    
+    # Impute missing values, we can choose, mean, median or most frequent
+    # Choosing mean as we didn't notice skewness in the attribute distribution
+    replaceMissingValues(X, strategy = 'mean')
+    #from fancyimpute import KNN
+    #X = replaceMissingValueswFancyImpute(X)
+    
+    (train_varreduced, test_varreduced) = reduceFeaturesbyVariance(X, Xtest, 0.22)
+
+    # Reduce features using tree based model
+    (train_treereduced, test_treereduced) = reduceFeatureswithExtraTrees(Y, X, Xtest)
     
     # Run randomforest classifier with gridsearch
-    #runRandomForestwithGridSearch(Y, X, Xtest, True)
+    #runRandomForestwithGridSearch(Y, X, Xtest, False)
     
     # Run SVM classifier with gridsearch
-    #runSVMwithGridSearch(Y, X, Xblind, True)
+    #runSVMwithGridSearch(Y, X, Xtest, False)
     
     # Run DecisionTree classifier with AdaBoost
-    runDecisionTreewithAdaboost(Y, X, Xtest, False)
+    #runDecisionTreewithAdaboost(Y, X, Xtest, False)
     
 if __name__=='__main__':
     
