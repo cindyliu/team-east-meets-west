@@ -28,7 +28,8 @@ from sklearn.ensemble import ExtraTreesClassifier
 from sklearn.feature_selection import SelectFromModel
 from sklearn.preprocessing import Imputer
 from sklearn.svm import SVC
-from fancyimpute import KNN
+# NOTE: Uncomment this to run replaceMissingValueswFancyImpute()
+#from fancyimpute import KNN
 
 # Set the parameters for Matplotlib figure size
 # for the rest of the Notebook as in section notes
@@ -209,6 +210,7 @@ def replaceMissingValueswFancyImpute(X):
     # Use 3 nearest rows which have a feature to fill in each row's missing features
     knnImpute = KNN(k=3)
     X_imputed = knnImpute.complete(X)
+    logger.info('Missing values replaced using FancyImpute(KNN)')
     return (X_imputed)
 
 def reduceFeaturesbyVariance(Xtrain, Xtest, threshold = 0.22):
@@ -471,6 +473,7 @@ def main():
     
     # Fancyimpute requires installation of other packages
     # We can use this or the simple imputation shown above
+    # NOTE: Will need to uncomment the FancyImpute import to run this
     #X = replaceMissingValueswFancyImpute(X)
     
     # Run randomforest classifier with gridsearch
