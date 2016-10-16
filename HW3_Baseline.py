@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Sat Oct 1 16:06:15 2016
+
+@author: Hazel John and Cindy Liu
+"""
 import pandas as pd
 import numpy as np
 import warnings
@@ -21,7 +28,7 @@ from sklearn.ensemble import ExtraTreesClassifier
 from sklearn.feature_selection import SelectFromModel
 from sklearn.preprocessing import Imputer
 from sklearn.svm import SVC
-#from fancyimpute import KNN
+from fancyimpute import KNN
 
 # Set the parameters for Matplotlib figure size
 # for the rest of the Notebook as in section notes
@@ -201,7 +208,8 @@ def replaceMissingValues(X, strategy):
 def replaceMissingValueswFancyImpute(X):
     # Use 3 nearest rows which have a feature to fill in each row's missing features
     knnImpute = KNN(k=3)
-    X = knnImpute.complete(X)
+    X_imputed = knnImpute.complete(X)
+    return (X_imputed)
 
 def reduceFeaturesbyVariance(Xtrain, Xtest, threshold = 0.22):
     # one way of removing low importance features is to 
@@ -462,8 +470,8 @@ def main():
     replaceMissingValues(X, strategy = 'mean')
     
     # Fancyimpute requires installation of other packages
-    # We ca use this or the simple imputation shown above
-    #replaceMissingValueswFancyImpute(X)
+    # We can use this or the simple imputation shown above
+    #X = replaceMissingValueswFancyImpute(X)
     
     # Run randomforest classifier with gridsearch
     #runRandomForestwithGridSearch(Y, X, Xtest, False)
